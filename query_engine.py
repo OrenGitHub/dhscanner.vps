@@ -1,3 +1,8 @@
+import re
+import json
+import requests
+
+
 TO_QUERY_ENGINE_URL = 'http://queryengine:5000/check'
 
 def compute_line_byte_offsets(code: str) -> dict[int, int]:

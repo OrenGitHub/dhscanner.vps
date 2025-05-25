@@ -1,5 +1,9 @@
 import typing
+import requests
+import collections
+
 from language import Language
+from redis_coordinator import RedisCoordinator
 
 AST_BUILDER_URL = {
     Language.JS: 'http://frontjs:3000/to/esprima/js/ast',
@@ -118,3 +122,14 @@ def parse_code(files: dict[Language, list[str]], offsets: dict[str, dict[int, in
     add_php_asts(files, asts)
 
     return asts
+
+def worker_loop() -> None:
+
+    the_coordinator = RedisCoordinator()
+
+    while True:
+
+        job_ids = the_coordinator.get_jobs_to_analyze()
+
+        for job_id in job_ids:
+            pass

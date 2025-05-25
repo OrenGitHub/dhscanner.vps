@@ -1,3 +1,6 @@
+import requests
+import collections
+
 from language import Language
 
 DHSCANNER_AST_BUILDER_URL = {

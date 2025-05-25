@@ -14,6 +14,7 @@ from language import Language
 
 class StatusKind(str, enum.Enum):
 
+    StatusAnalysisStarted = 'AnalysisStarted'
     StatusNativeParsingFinished = 'StatusNativeParsingFinished'
     StatusDhscannerParsingFinished = 'StatusDhscannerParsingFinished'
     StatusCodegenFinished = 'StatusCodegenFinished'
@@ -36,10 +37,13 @@ class Status(abc.ABC):
         ...
 
     kind: StatusKind = dataclasses.field(init=False)
+    job_id: str = dataclasses.field(init=False)
 
     @staticmethod
     def concrete_deserialization(kind: StatusKind) -> typing.Callable[[dict], typing.Optional[Status]]:
         match (kind):
+            case StatusKind.StatusAnalysisStarted:
+                return AnalysisStarted.deserialization
             case StatusKind.StatusNativeParsingFinished:
                 return NativeParsingFinished.deserialization
             case StatusKind.StatusDhscannerParsingFinished:
@@ -65,6 +69,9 @@ class Status(abc.ABC):
             return deserialization_func(content)
         
         return None
+    
+    def start_analyzing(self) -> bool:
+        return False
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class StatsLanguage:
@@ -144,6 +151,26 @@ class Stats:
             return None
 
         return Stats(data)
+
+@dataclasses.dataclass(frozen=True)
+class AnalysisStarted(Status):
+
+    start: datetime
+    kind: StatusKind = dataclasses.field(
+        init=False,
+        default=StatusKind.StatusAnalysisStarted
+    )
+
+    @staticmethod
+    def deserialization(content: dict) -> typing.Optional[Status]:
+        if 'start' not in content:
+            return None
+        
+        return AnalysisStarted(content['start'])
+    
+    @typing.override
+    def start_analyzing(self) -> bool:
+        return True
 
 @dataclasses.dataclass(frozen=True)
 class NativeParsingFinished(Status):
@@ -240,4 +267,8 @@ class Coordinator(abc.ABC):
 
     @abc.abstractmethod
     def set_status(self, job_id: str, status: Status) -> None:
+        ...
+
+    @abc.abstractmethod
+    def get_jobs_to_analyze(self) -> list[str]:
         ...

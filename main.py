@@ -3,8 +3,12 @@ import sys
 import typing
 import logging
 import fastapi
+import dataclasses
+
+from datetime import datetime
 
 import storage
+import coordinator
 
 from redis_coordinator import RedisCoordinator
 
@@ -103,29 +107,37 @@ async def upload(
     _2=fastapi.Depends(content_type_check)
 ) -> dict:
 
-    content = get_actual_file_content(request)
-    storage.store_file(content, filename, job_id)
+    content = await get_actual_file_content(request)
+    await storage.store_file(content, filename, job_id)
     return upload_succeeded(filename)
 
-coordinator = RedisCoordinator()
+the_coordinator = RedisCoordinator()
 
 async def status(
     job_id: str = fastapi.Query(..., description=API_ANALYZE_JOB_ID_DESCRIPTION),
     _=fastapi.Depends(authentication_check)
 ) -> dict:
 
-    return coordinator.get_status(job_id)
+    if status := the_coordinator.get_status(job_id):
+        return dataclasses.asdict(status)
+    
+    return {'status': f'fatal error processing job(id): {job_id}'}
 
 async def analyze(
     job_id: str = fastapi.Query(..., description=API_ANALYZE_JOB_ID_DESCRIPTION),
     _=fastapi.Depends(authentication_check)
 ) -> dict:
 
-    signal_start_analysis(job_id)
-    return started_analysis(job_id)
+    now = datetime.now()
+    analysis_started_status = coordinator.AnalysisStarted(now)
+    the_coordinator.set_status(job_id, analysis_started_status)
+    return analysis_started(job_id)
 
 async def get_actual_file_content(request: fastapi.Request) -> typing.AsyncIterator[bytes]:
     return request.stream()
 
 def upload_succeeded(filename: str) -> dict:
     return {'status': 'ok', 'original_upload_filename': filename}
+
+def analysis_started(job_id: str) -> dict:
+    return {'status': 'ok', 'started_analyzing_job_id': job_id}
