@@ -1,9 +1,17 @@
+import asyncio
 import typing
+
+import aiofiles
+import aiohttp
 import requests
 import collections
 
 from language import Language
+from coordinator import Coordinator
 from redis_coordinator import RedisCoordinator
+
+import models
+import storage
 
 AST_BUILDER_URL = {
     Language.JS: 'http://frontjs:3000/to/esprima/js/ast',
@@ -19,117 +27,64 @@ AST_BUILDER_URL = {
 
 CSRF_TOKEN = 'http://frontphp:5000/csrf_token'
 
-def read_single_file(filename: str, offsets: typing.Optional[dict[str, dict[int, int]]] = None):
-
-    with open(filename, 'r', encoding='utf-8') as fl:
-        code = fl.read()
-
-    if offsets is not None:
-        cleaned = remove_tmp_prefix(filename)
-        offsets[cleaned] = compute_line_byte_offsets(code)
-
-    return { 'source': (filename, code) }
-
 # TODO: adjust other reasons for exclusion
 # the reasons might depend on the language
 # (like the third party directory name: node_module for javascript,
 # site-packages for python or vendor/bundle for ruby etc.)
 # pylint: disable=unused-argument
-def scan_this_file(filename: str, language: Language, ignore_testing_code: bool = False) -> bool:
-    if ignore_testing_code and '/test/' in filename:
+def scan_worthy(f: models.FileMetadata) -> bool:
+
+    if '/test/' in f.original_filename:
         return False
 
-    if ignore_testing_code and '.test.' in filename:
+    if '.test.' in f.original_filename:
         return False
 
     return True
 
-# Laravel has a built-in csrf token demand
-# There are other options too, but currently
-# I'm sticking to Laravel ... this means that all
-# the php files should be added using the same session
-def add_php_asts(files: dict[Language, list[str]], asts: dict) -> None:
+async def parse(
+    session: aiohttp.ClientSession,
+    code: dict[str, typing.Tuple[str, bytes]],
+    f: models.FileMetadata
+) -> typing.Optional[str]:
 
-    session = requests.Session()
-    response = session.get(CSRF_TOKEN)
-    token = response.text
-    cookies = session.cookies
-    headers = { 'X-CSRF-TOKEN': token }
+    async with session.post(AST_BUILDER_URL[f.language], data=code) as response:
+            return await response.text()
 
-    filenames = files[Language.PHP]
-    for filename in filenames:
-        if filename in files[Language.BLADE_PHP]:
-            just_one_blade_php_file = read_single_file(filename)
+async def read_source_file(
+    filename: str,
+    original_filename: str
+) -> dict[str, typing.Tuple[str, bytes]]:
 
-            # sometimes blade.php files are just plain php files
-            # this could happen for various reasons ...
-            # try the normal php parser first
-            response = session.post(
-                AST_BUILDER_URL[Language.PHP],
-                files=just_one_blade_php_file,
-                headers=headers,
-                cookies=cookies
-            )
+    async with aiofiles.open(filename, 'rb') as f:
+        code = await f.read()
 
-            if response.ok:
-                # no transformations need to be done
-                # TODO: fix multiple sends of such blade.php files
-                php_source_code = just_one_blade_php_file
-            else:
-                response = session.post(
-                    AST_BUILDER_URL[Language.BLADE_PHP],
-                    files=just_one_blade_php_file,
-                    headers=headers,
-                    cookies=cookies
-                )
-                php_source_code = { 'source': (filename, response.text) }
-        else:
-            php_source_code = read_single_file(filename)
+    return { 'source': (original_filename, code) }
 
-        # from here on, plain php code
-        response = session.post(
-            AST_BUILDER_URL[Language.PHP],
-            files=php_source_code,
-            headers=headers,
-            cookies=cookies
-        )
+async def run_single_file(
+    session: aiohttp.ClientSession,
+    job_id: str,
+    f: models.FileMetadata
+) -> None:
+    code = await read_source_file(f.file_unique_id)
+    content = await parse(session, code, f)
+    await storage.store_ast(content, f, job_id)
 
-        asts[Language.PHP].append({
-            'filename': filename,
-            'actual_ast': response.text
-        })
+async def run(job_id: str) -> None:
 
+    files = storage.load_files_metadata_from_db(job_id)
+    async with aiohttp.ClientSession() as session:
+        tasks = [run_single_file(session, job_id, f) for f in files if scan_worthy(f)]
+        await asyncio.gather(*tasks)
 
-def add_ast(filename: str, language: Language, asts: dict, offsets: dict[str, dict[int, int]]) -> None:
+async def worker_loop_internal(job_ids: list[str]) -> None:
+    tasks = [run(job_id) for job_id in job_ids]
+    await asyncio.gather(*tasks)
 
-    one_file_at_a_time = read_single_file(filename, offsets)
-    response = requests.post(AST_BUILDER_URL[language], files=one_file_at_a_time)
-    asts[language].append({ 'filename': filename, 'actual_ast': response.text })
-
-def parse_code(files: dict[Language, list[str]], offsets: dict[str, dict[int, int]]) -> dict[Language, list[dict[str, str]]]:
-
-    asts = collections.defaultdict(list) # type: ignore[var-annotated]
-
-    for language, filenames in files.items():
-        if language not in [Language.PHP, Language.BLADE_PHP]:
-            for filename in filenames:
-                add_ast(filename, language, asts, offsets)
-
-    # separately because php chosen webserver
-    # has a more complex sessio mechanism
-    # see more details inside the function
-    # it handles both plain php files and blade.php files
-    add_php_asts(files, asts)
-
-    return asts
-
-def worker_loop() -> None:
-
-    the_coordinator = RedisCoordinator()
-
+async def worker_loop(the_coordinator: Coordinator) -> None:
     while True:
+        await worker_loop_internal(the_coordinator.get_jobs_waiting_for_step_0_native_parsing())
+        await asyncio.sleep(1)
 
-        job_ids = the_coordinator.get_jobs_to_analyze()
-
-        for job_id in job_ids:
-            pass
+def check_in() -> None:
+     asyncio.run(worker_loop(RedisCoordinator()))

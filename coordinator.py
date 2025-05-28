@@ -70,7 +70,19 @@ class Status(abc.ABC):
         
         return None
     
-    def start_analyzing(self) -> bool:
+    def wait_for_step_0_native_parsing(self) -> bool:
+        return False
+
+    def wait_for_step_1_dhscanner_parsing(self) -> bool:
+        return False
+
+    def wait_for_step_2_code_generation(self) -> bool:
+        return False
+
+    def wait_for_step_3_knowledge_base_generation(self) -> bool:
+        return False
+
+    def wait_for_step_4_query_engine(self) -> bool:
         return False
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -169,7 +181,7 @@ class AnalysisStarted(Status):
         return AnalysisStarted(content['start'])
     
     @typing.override
-    def start_analyzing(self) -> bool:
+    def wait_for_step_0_native_parsing(self) -> bool:
         return True
 
 @dataclasses.dataclass(frozen=True)
@@ -270,5 +282,21 @@ class Coordinator(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def get_jobs_to_analyze(self) -> list[str]:
+    def get_jobs_waiting_for_step_0_native_parsing(self) -> list[str]:
+        ...
+
+    @abc.abstractmethod
+    def get_jobs_waiting_for_step_1_dhscanner_parsing(self) -> list[str]:
+        ...
+
+    @abc.abstractmethod
+    def get_jobs_waiting_for_step_2_code_generation(self) -> list[str]:
+        ...
+
+    @abc.abstractmethod
+    def get_jobs_waiting_for_step_3_knwoledge_base_generation(self) -> list[str]:
+        ...
+
+    @abc.abstractmethod
+    def get_jobs_waiting_for_step_4_query_engine(self) -> list[str]:
         ...

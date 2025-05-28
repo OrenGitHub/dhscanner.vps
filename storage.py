@@ -1,3 +1,4 @@
+import dataclasses
 import uuid
 import typing
 import pathlib
@@ -19,19 +20,31 @@ def mk_jobdir_if_needed(job_id: str) -> pathlib.Path:
 def get_unique_id() -> str:
     return str(uuid.uuid4())
 
-def get_suffix_from(filename: str) -> str:
-    return pathlib.Path(filename).suffix or '.unknown'
+def get_language_from(filename: str) -> typing.Optional[Language]:
+    if language := Language.from_raw_str(pathlib.Path(filename).suffix):
+        return language
+    
+    return None
 
-def mk_stored_filename(job_dir: pathlib.Path, suffix: str) -> pathlib.Path:
+def mk_stored_filename(job_dir: pathlib.Path, language: Language) -> pathlib.Path:
     unique_id = get_unique_id()
-    return job_dir / f'{unique_id}{suffix}'
+    return job_dir / f'{unique_id}.{language.value}'
 
 async def store_file(content: typing.AsyncIterator[bytes], original_filename_in_repo: str, job_id: str) -> None:
     job_dir = mk_jobdir_if_needed(job_id)
-    suffix = get_suffix_from(original_filename_in_repo)
-    stored_filename = mk_stored_filename(job_dir, suffix)
+    language = get_language_from(original_filename_in_repo)
+    stored_filename = mk_stored_filename(job_dir, language)
     await store_content_as_file_on_disk(content, stored_filename)
-    store_file_metadata_in_db(stored_filename, original_filename_in_repo, suffix, job_id)
+    file_metadata = models.FileMetadata(stored_filename, job_id, original_filename_in_repo, language)
+    store_file_metadata_in_db(file_metadata)
+
+async def store_ast(content: typing.AsyncIterator[bytes], original_filename_in_repo: str, job_id: str) -> None:
+    job_dir = mk_jobdir_if_needed(job_id)
+    language = get_language_from(original_filename_in_repo)
+    stored_filename = mk_stored_filename(job_dir, language)
+    await store_content_as_file_on_disk(content, stored_filename)
+    file_metadata = models.FileMetadata(stored_filename, job_id, original_filename_in_repo, language)
+    store_ast_metadata_in_db(file_metadata)
 
 async def store_content_as_file_on_disk(
     content: typing.AsyncIterator[bytes],
@@ -42,23 +55,25 @@ async def store_content_as_file_on_disk(
         async for chunk in content:
             await fl.write(chunk)
 
-def store_file_metadata_in_db(
-    stored_filename: pathlib.Path,
-    original_filename_in_repo: str,
-    suffix: str,
-    job_id: str
-) -> None:
+def store_file_metadata_in_db(file_metadata: models.FileMetadata) -> None:
 
-    if language := Language.from_raw_str(suffix):
+    if language := Language.from_raw_str(file_metadata.suffix):
 
         session = db.SessionLocal()
         stmt = sqlalchemy.insert(models.FILES).values(
-            file_unique_id=stored_filename,
-            job_id=job_id,
-            original_filename=original_filename_in_repo,
+            file_unique_id=file_metadata.stored_filename,
+            job_id=file_metadata.job_id,
+            original_filename=file_metadata.original_filename_in_repo,
             language=language
         )
 
         with db.SessionLocal() as session:
             session.execute(stmt)
             session.commit()
+
+def load_files_metadata_from_db(job_id: str) -> list[models.FileMetadata]:
+    with db.SessionLocal() as session:
+        condition_is_satisfied = models.FILES.c.job_id == job_id
+        stmt = sqlalchemy.select(models.FileMetadata).where(condition_is_satisfied)
+        result = session.execute(stmt)
+        return result.scalars().all()

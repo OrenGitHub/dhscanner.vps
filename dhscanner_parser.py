@@ -1,7 +1,14 @@
-import requests
-import collections
+import typing
+import aiohttp
+import asyncio
+import aiofiles
+
+import models
+import storage
 
 from language import Language
+from coordinator import Coordinator
+from redis_coordinator import RedisCoordinator
 
 DHSCANNER_AST_BUILDER_URL = {
     Language.JS: 'http://parsers:3000/from/js/to/dhscanner/ast',
@@ -14,19 +21,49 @@ DHSCANNER_AST_BUILDER_URL = {
     Language.GO: 'http://parsers:3000/from/go/to/dhscanner/ast',
 }
 
-def add_dhscanner_ast(filename: str, language: Language, code, asts) -> None:
+async def parse(
+    session: aiohttp.ClientSession,
+    code: dict[str, typing.Tuple[str, bytes]],
+    f: models.FileMetadata
+) -> typing.Optional[str]:
 
-    content = { 'filename': filename, 'content': code}
-    url = DHSCANNER_AST_BUILDER_URL[language]
-    response = requests.post(f'{url}?filename={filename}', json=content)
-    asts[language].append({ 'filename': filename, 'dhscanner_ast': response.text })
+    async with session.post(DHSCANNER_AST_BUILDER_URL[f.language], data=code) as response:
+            return await response.text()
 
-def parse_language_asts(language_asts):
+async def read_ast_file(
+    filename: str,
+    original_filename: str
+) -> dict[str, typing.Tuple[str, bytes]]:
 
-    dhscanner_asts = collections.defaultdict(list)
+    async with aiofiles.open(filename, 'rb') as f:
+        ast = await f.read()
 
-    for language, asts in language_asts.items():
-        for ast in asts:
-            add_dhscanner_ast(ast['filename'], language, ast['actual_ast'], dhscanner_asts)
+    return { 'source': (original_filename, ast) }
 
-    return dhscanner_asts
+async def run_single_ast(
+    session: aiohttp.ClientSession,
+    job_id: str,
+    f: models.FileMetadata
+) -> None:
+    ast = await read_ast_file(f.file_unique_id)
+    dhscanner_ast = await parse(session, ast, f)
+    await storage.store_dhscanner_ast(dhscanner_ast, f, job_id)
+
+async def run(job_id: str) -> None:
+
+    asts = storage.load_asts_metadata_from_db(job_id)
+    async with aiohttp.ClientSession() as session:
+        tasks = [run_single_ast(session, job_id, f) for f in asts]
+        await asyncio.gather(*tasks)
+
+async def worker_loop_internal(job_ids: list[str]) -> None:
+    tasks = [run(job_id) for job_id in job_ids]
+    await asyncio.gather(*tasks)
+
+async def worker_loop(the_coordinator: Coordinator) -> None:
+    while True:
+        await worker_loop_internal(the_coordinator.get_jobs_waiting_for_step_0_native_parsing())
+        await asyncio.sleep(1)
+
+def check_in() -> None:
+     asyncio.run(worker_loop(RedisCoordinator()))

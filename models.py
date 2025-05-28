@@ -1,14 +1,25 @@
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 import sqlalchemy
 
 from language import Language
 
-metadata = sqlalchemy.MetaData()
+class Base(DeclarativeBase):
+    pass
 
-FILES = sqlalchemy.Table(
-    'FILES',
-    metadata,
-    sqlalchemy.Column('file_unique_id', sqlalchemy.String, primary_key=True),
-    sqlalchemy.Column('job_id', sqlalchemy.String, nullable=False),
-    sqlalchemy.Column('original_filename', sqlalchemy.String, nullable=False),
-    sqlalchemy.Column('language', sqlalchemy.SQLEnum(Language), nullable=False),
-)
+class FileMetadata(Base):
+
+    __tablename__ = "files"
+
+    file_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    language: Mapped[Language] = mapped_column(sqlalchemy.SQLEnum(Language), nullable=False)
+
+class AstMetadata(Base):
+
+    __tablename__ = "asts"
+
+    ast_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    language: Mapped[Language] = mapped_column(sqlalchemy.SQLEnum(Language), nullable=False)
