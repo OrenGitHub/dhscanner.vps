@@ -1,0 +1,16 @@
+services:
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TZ: ${TZ:-Asia/Jerusalem}
+      environment:
+        NUM_APPROVED_URLS: ${NUM_APPROVED_URLS:-1}
+        APPROVED_URL_0: ${APPROVED_URL_0:?Not found}
+        APPROVED_BEARER_TOKEN_0: ${APPROVED_BEARER_TOKEN_0:?Not found}
+    ports:
+      - 8000:8000
+    networks:
+      - dhscanner
