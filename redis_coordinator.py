@@ -1,3 +1,4 @@
+import datetime
 import json
 import redis
 import typing
@@ -7,6 +8,7 @@ from coordinator import (
     Coordinator,
     Status
 )
+import coordinator
 
 REDIS_HOST: typing.Final[str] = 'redis'
 REDIS_PORT: typing.Final[int] = 6379
@@ -100,6 +102,13 @@ class RedisCoordinator(Coordinator):
                     job_ids.append(job_id)
 
         return job_ids
+
+    @typing.override
+    def mark_jobs_that_finished_step_0_and_now_wait_for_step_1(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            now = datetime.now()
+            native_parsing_finished = coordinator.NativeParsingFinished(now)
+            self.set_status(job_id, native_parsing_finished)
 
     def get_status_bytes(self, job_id: str) -> typing.Optional[bytes]:
         return self.redis_client.get(job_id)

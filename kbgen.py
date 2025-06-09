@@ -1,19 +1,16 @@
-import httpx
 import asyncio
+import aiohttp
+
+import storage
+
+from coordinator import Coordinator
+from redis_coordinator import RedisCoordinator
 
 TO_KBGEN_URL = 'http://kbgen:3000/kbgen'
 
-async def kbgen_single(client, one_callable):
-    response = await client.post(TO_KBGEN_URL, json=one_callable)
-    return response.text
+async def run(job_id: str) -> None:
 
-async def kbgen_async(callables):
-    async with httpx.AsyncClient() as client:
-        tasks = [kbgen_single(client, c) for c in callables]
-        responses = await asyncio.gather(*tasks)
-    return responses
-
-async def kbgen(callables):
-    responses = await kbgen_async(callables)
-    # logging.info(f'received {len(callables)} callables')
-    return responses
+    files = storage.load_files_metadata_from_db(job_id)
+    async with aiohttp.ClientSession() as session:
+        tasks = [run_single_file(session, job_id, f) for f in files]
+        await asyncio.gather(*tasks)

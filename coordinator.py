@@ -300,3 +300,7 @@ class Coordinator(abc.ABC):
     @abc.abstractmethod
     def get_jobs_waiting_for_step_4_query_engine(self) -> list[str]:
         ...
+
+    @abc.abstractmethod
+    def mark_jobs_that_finished_step_0_and_now_wait_for_step_1(self) -> None:
+        ...

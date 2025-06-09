@@ -1,14 +1,11 @@
-import asyncio
 import typing
-
-import aiofiles
+import asyncio
 import aiohttp
-import requests
-import collections
+import aiofiles
+import dataclasses
 
 from language import Language
-from coordinator import Coordinator
-from redis_coordinator import RedisCoordinator
+from abstract_worker import AbstractWorker
 
 import models
 import storage
@@ -25,66 +22,60 @@ AST_BUILDER_URL = {
     Language.BLADE_PHP: 'http://frontphp:5000/to/php/code'
 }
 
-CSRF_TOKEN = 'http://frontphp:5000/csrf_token'
+@dataclasses.dataclass(frozen=True)
+class NativeParser(AbstractWorker):
 
-# TODO: adjust other reasons for exclusion
-# the reasons might depend on the language
-# (like the third party directory name: node_module for javascript,
-# site-packages for python or vendor/bundle for ruby etc.)
-# pylint: disable=unused-argument
-def scan_worthy(f: models.FileMetadata) -> bool:
+    @typing.override
+    async def run(self, job_id: str) -> None:
+        files = storage.load_files_metadata_from_db(job_id)
+        async with aiohttp.ClientSession() as session:
+            scan = NativeParser.scan_worthy
+            tasks = [self.run_single_file(session, job_id, f) for f in files if scan(f)]
+            await asyncio.gather(*tasks)
 
-    if '/test/' in f.original_filename:
-        return False
+    async def run_single_file(
+        self,
+        session: aiohttp.ClientSession,
+        job_id: str,
+        f: models.FileMetadata
+    ) -> None:
+        code = await NativeParser.read_source_file(f.file_unique_id)
+        content = await NativeParser.parse(session, code, f)
+        await storage.store_ast(content, f, job_id)
 
-    if '.test.' in f.original_filename:
-        return False
-
-    return True
-
-async def parse(
-    session: aiohttp.ClientSession,
-    code: dict[str, typing.Tuple[str, bytes]],
-    f: models.FileMetadata
-) -> typing.Optional[str]:
-
-    async with session.post(AST_BUILDER_URL[f.language], data=code) as response:
+    @staticmethod
+    async def parse(
+        session: aiohttp.ClientSession,
+        code: dict[str, typing.Tuple[str, bytes]],
+        f: models.FileMetadata
+    ) -> typing.Optional[str]:
+        url = AST_BUILDER_URL[f.language]
+        async with session.post(url, data=code) as response:
             return await response.text()
 
-async def read_source_file(
-    filename: str,
-    original_filename: str
-) -> dict[str, typing.Tuple[str, bytes]]:
+    @staticmethod
+    async def read_source_file(
+        filename: str,
+        original_filename: str
+    ) -> dict[str, typing.Tuple[str, bytes]]:
 
-    async with aiofiles.open(filename, 'rb') as f:
-        code = await f.read()
+        async with aiofiles.open(filename, 'rb') as f:
+            code = await f.read()
 
-    return { 'source': (original_filename, code) }
+        return { 'source': (original_filename, code) }
 
-async def run_single_file(
-    session: aiohttp.ClientSession,
-    job_id: str,
-    f: models.FileMetadata
-) -> None:
-    code = await read_source_file(f.file_unique_id)
-    content = await parse(session, code, f)
-    await storage.store_ast(content, f, job_id)
+    # TODO: adjust other reasons for exclusion
+    # the reasons might depend on the language
+    # (like the third party directory name: node_module for javascript,
+    # site-packages for python or vendor/bundle for ruby etc.)
+    # pylint: disable=unused-argument
+    @staticmethod
+    def scan_worthy(f: models.FileMetadata) -> bool:
 
-async def run(job_id: str) -> None:
+        if '/test/' in f.original_filename:
+            return False
 
-    files = storage.load_files_metadata_from_db(job_id)
-    async with aiohttp.ClientSession() as session:
-        tasks = [run_single_file(session, job_id, f) for f in files if scan_worthy(f)]
-        await asyncio.gather(*tasks)
+        if '.test.' in f.original_filename:
+            return False
 
-async def worker_loop_internal(job_ids: list[str]) -> None:
-    tasks = [run(job_id) for job_id in job_ids]
-    await asyncio.gather(*tasks)
-
-async def worker_loop(the_coordinator: Coordinator) -> None:
-    while True:
-        await worker_loop_internal(the_coordinator.get_jobs_waiting_for_step_0_native_parsing())
-        await asyncio.sleep(1)
-
-def check_in() -> None:
-     asyncio.run(worker_loop(RedisCoordinator()))
+        return True
