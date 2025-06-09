@@ -1,0 +1,20 @@
+services:
+  native_parser:
+    build:
+      context: workers/native_parser
+      dockerfile: ../../workers/Dockerfile
+
+  dhscanner_parser:
+    build:
+      context: workers/dhscanner_parser
+      dockerfile: ../../workers/Dockerfile
+
+  codegen_worker:
+    build:
+      context: workers/codegen
+      dockerfile: ../../workers/Dockerfile
+
+  kbgen_worker:
+    build:
+      context: workers/kbgen
+      dockerfile: ../../workers/Dockerfile
