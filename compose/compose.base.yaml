@@ -1,0 +1,33 @@
+services:
+
+  logger:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: logs
+    volumes:
+      - logger-data:/var/lib/postgresql/data
+    networks:
+      - dhscanner
+
+  logger_server:
+    build:
+      context: ./base/logger
+    networks:
+      - dhscanner
+
+  mq:
+    image: redis:7
+    container_name: mq
+    restart: unless-stopped
+    networks:
+      - dhscanner
+    expose:
+      - 6379
+
+volumes:
+  logger-data:
+
+networks:
+  dhscanner:
