@@ -5,7 +5,7 @@ import aiofiles
 import dataclasses
 
 from common.language import Language
-from abstract_worker import AbstractWorker
+from workers.interface import AbstractWorker
 
 import models
 import storage

@@ -7,7 +7,7 @@ import dataclasses
 
 import storage
 
-from abstract_worker import AbstractWorker
+from workers.interface import AbstractWorker
 
 TO_CODEGEN_URL = 'http://codegen:3000/codegen'
 

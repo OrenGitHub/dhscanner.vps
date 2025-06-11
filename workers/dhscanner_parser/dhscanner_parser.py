@@ -8,7 +8,7 @@ import models
 import storage
 
 from common.language import Language
-from abstract_worker import AbstractWorker
+from workers.interface import AbstractWorker
 
 DHSCANNER_AST_BUILDER_URL = {
     Language.JS: 'http://parsers:3000/from/js/to/dhscanner/ast',
