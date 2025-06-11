@@ -7,7 +7,7 @@ import dataclasses
 import models
 import storage
 
-from language import Language
+from common.language import Language
 from abstract_worker import AbstractWorker
 
 DHSCANNER_AST_BUILDER_URL = {

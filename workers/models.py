@@ -1,7 +1,7 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 import sqlalchemy
 
-from language import Language
+from common.language import Language
 
 class Base(DeclarativeBase):
     pass

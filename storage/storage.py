@@ -7,7 +7,7 @@ import sqlalchemy
 
 import db
 import models
-from language import Language
+from common.language import Language
 
 
 BASEDIR: typing.Final[pathlib.Path] = pathlib.Path('/tmp/dhscanner_jobs')

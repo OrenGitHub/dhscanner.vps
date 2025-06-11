@@ -4,7 +4,7 @@ import aiohttp
 import aiofiles
 import dataclasses
 
-from language import Language
+from common.language import Language
 from abstract_worker import AbstractWorker
 
 import models
