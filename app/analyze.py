@@ -4,7 +4,10 @@ import fastapi
 from datetime import datetime
 
 import authentication
-from coordinator.coordinator import Coordinator
+from coordinator.interface import (
+    AnalysisStarted,
+    Coordinator
+)
 
 API_ANALYZE_JOB_ID_DESCRIPTION: typing.Final[str] = """
 launch multi-step static code analysis
@@ -15,10 +18,8 @@ async def run(
     job_id: str = fastapi.Query(..., description=API_ANALYZE_JOB_ID_DESCRIPTION),
     _=fastapi.Depends(authentication.check)
 ) -> dict:
-
-    now = datetime.now()
-    analysis_started_status = coordinator.AnalysisStarted(now)
-    coordinator.set_status(job_id, analysis_started_status)
+    analysis_started = AnalysisStarted(datetime.now())
+    coordinator.set_status(job_id, analysis_started)
     return analysis_started(job_id)
 
 def analysis_started(job_id: str) -> dict:

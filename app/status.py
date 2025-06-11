@@ -3,7 +3,7 @@ import fastapi
 import dataclasses
 
 from app import authentication
-from coordinator.coordinator import Coordinator
+from coordinator.interface import Coordinator
 
 API_ANALYZE_JOB_ID_DESCRIPTION: typing.Final[str] = """
 launch multi-step static code analysis

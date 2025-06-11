@@ -14,6 +14,8 @@ class Language(str, enum.Enum):
     CS = 'cs'
     GO = 'go'
     BLADE_PHP = 'blade.php'
+    ALL = 'ALL'
+    UNKNOWN = 'UNKNOWN'
 
     @staticmethod
     def from_raw_str(raw: str) -> typing.Optional[Language]:

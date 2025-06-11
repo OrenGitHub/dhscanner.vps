@@ -7,7 +7,6 @@ import dataclasses
 from common.language import Language
 from workers.interface import AbstractWorker
 
-import models
 import storage
 
 AST_BUILDER_URL = {

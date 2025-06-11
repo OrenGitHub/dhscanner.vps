@@ -2,7 +2,7 @@ import typing
 import fastapi
 
 import authentication
-from coordinator.coordinator import Coordinator
+from storage.interface import Storage
 
 API_UPLOAD_JOB_ID_DESCRIPTION: typing.Final[str] = """
 every uploaded file belongs to a job(id)
@@ -26,7 +26,7 @@ async def get_actual_file_content(request: fastapi.Request) -> typing.AsyncItera
     return request.stream()
 
 async def run(
-    coordinator: Coordinator,
+    storage: Storage,
     request: fastapi.Request,
     job_id: str = fastapi.Query(..., description=API_UPLOAD_JOB_ID_DESCRIPTION),
     filename: str = fastapi.Header(..., alias="X-Path", description=API_UPLOAD_FILENAME_DESCRIPTION),
@@ -35,7 +35,7 @@ async def run(
 ) -> dict:
 
     content = await get_actual_file_content(request)
-    await storage.store_file(content, filename, job_id)
+    await storage.save_file(content, filename, job_id)
     return upload_succeeded(filename)
 
 def upload_succeeded(filename: str) -> dict:

@@ -8,20 +8,21 @@ import upload
 import status
 import analyze
 
-from coordinator.coordinator import Coordinator
-from coordinator.redis_coordinator import RedisCoordinator
+from storage.interface import Storage
+from coordinator.interface import Coordinator
+from coordinator.redis import RedisCoordinator
 
 app = fastapi.FastAPI()
 
 # pylint: disable=cell-var-from-loop,redefined-outer-name
-def create_handlers(approved_url: str, coordinator: Coordinator):
+def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storage):
 
     limiter = slowapi.Limiter(key_func=lambda request: request.client.host)
 
     @app.post(f'api/{approved_url}/upload')
     @limiter.limit('1000/second')
     async def _(request: fastapi.Request, authorization: str = fastapi.Header(...)):
-        return await upload.run(coordinator, request, authorization)
+        return await upload.run(storage, request, authorization)
 
     @app.post(f'api/{approved_url}/analyze')
     @limiter.limit('100/minute')
