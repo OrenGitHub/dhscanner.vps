@@ -1,10 +1,18 @@
+from __future__ import annotations
+
 import http
+import time
 import typing
 import aiohttp
 import asyncio
 import dataclasses
 
-from logger.models import Level, LogMessage
+from datetime import timedelta
+
+from contextlib import asynccontextmanager
+
+from storage.models import FileMetadata
+from logger.models import Context, Level, LogMessage
 
 MAX_RETRIES: typing.Final[int] = 3
 RETRY_DELAY: typing.Final[float] = 0.5
@@ -48,3 +56,22 @@ class Logger:
     @staticmethod
     async def debug(message: LogMessage):
         await Logger.send(message, Level.DEBUG)
+
+    @asynccontextmanager
+    async def time_this_info_msg(self, context: Context, f: FileMetadata):
+        start = time.monotonic()
+        try:
+            yield
+        finally:
+            delta = time.monotonic() - start
+            await self.info(
+                LogMessage(
+                    file_unique_id=f.file_unique_id,
+                    job_id=f.job_id,
+                    context=context,
+                    original_filename=f.original_filename,
+                    language=f.language,
+                    duration=timedelta(seconds=delta)
+                )
+            )
+

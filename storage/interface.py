@@ -2,6 +2,9 @@ import abc
 import typing
 import dataclasses
 
+import sqlalchemy
+
+from storage import db
 from storage.models import FileMetadata
 
 @dataclasses.dataclass(frozen=True)
@@ -54,3 +57,11 @@ class Storage(abc.ABC):
         job_id: str
     ) -> None:
         ...
+
+    @staticmethod
+    def load_files_metadata_from_db(job_id: str) -> list[FileMetadata]:
+        with db.SessionLocal() as session:
+            condition_is_satisfied = FileMetadata.job_id == job_id
+            stmt = sqlalchemy.select(FileMetadata).where(condition_is_satisfied)
+            result = session.execute(stmt).scalars().all()
+            return typing.cast(list[FileMetadata], result)

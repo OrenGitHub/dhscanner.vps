@@ -1,9 +1,12 @@
+from datetime import timedelta
+import time
 import typing
 import asyncio
 import aiohttp
 import dataclasses
 
 from common.language import Language
+from logger.models import Context, LogMessage
 from storage.models import FileMetadata
 from workers.interface import AbstractWorker
 
@@ -26,7 +29,7 @@ class NativeParser(AbstractWorker):
 
     @typing.override
     async def run(self, job_id: str) -> None:
-        files = storage.load_files_metadata_from_db(job_id)
+        files = self.the_storage_guy.load_files_metadata_from_db(job_id)
         async with aiohttp.ClientSession() as session:
             scan = NativeParser.scan_worthy
             tasks = [self.run_single_file(session, job_id, f) for f in files if scan(f)]
@@ -38,9 +41,11 @@ class NativeParser(AbstractWorker):
         job_id: str,
         f: FileMetadata
     ) -> None:
-        code = await self.read_source_file(f)
-        content = await NativeParser.parse(session, code, f)
-        await storage.store_ast(content, f, job_id)
+        
+        async with self.the_logger_dude.time_this_info_msg(Context.NATIVE_PARSER, f):
+            code = await self.read_source_file(f)
+            content = await NativeParser.parse(session, code, f)
+            await storage.store_ast(content, f, job_id)
 
     @staticmethod
     async def parse(

@@ -159,11 +159,3 @@ class LocalStorage(interface.Storage):
         with db.SessionLocal() as session:
             session.add(ast_metadata)
             session.commit()
-
-    @staticmethod
-    def load_files_metadata_from_db(job_id: str) -> list[models.FileMetadata]:
-        with db.SessionLocal() as session:
-            condition_is_satisfied = models.FileMetadata.job_id == job_id
-            stmt = sqlalchemy.select(models.FileMetadata).where(condition_is_satisfied)
-            result = session.execute(stmt)
-            return result.scalars().all()
