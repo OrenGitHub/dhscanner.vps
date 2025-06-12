@@ -24,6 +24,14 @@ API_UPLOAD_FILENAME_DESCRIPTION: typing.Final[str] = """
 relative filename with respect to the source directory root
 """
 
+API_ANALYZE_JOB_ID_DESCRIPTION: typing.Final[str] = """
+launch multi-step static code analysis
+"""
+
+API_STATUS_JOB_ID_DESCRIPTION: typing.Final[str] = """
+launch multi-step static code analysis
+"""
+
 # pylint: disable=cell-var-from-loop,redefined-outer-name
 def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storage):
 
@@ -42,13 +50,19 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
 
     @app.post(f'api/{approved_url}/analyze')
     @limiter.limit('100/minute')
-    async def _(request: fastapi.Request, authorization: str = fastapi.Header(...)):
-        return await analyze.run(coordinator, authorization)
+    async def _(
+        job_id: str = fastapi.Query(..., description=API_ANALYZE_JOB_ID_DESCRIPTION),
+        _=fastapi.Depends(authentication.check)
+    ):
+        return await analyze.run(coordinator, job_id)
 
     @app.post(f'api/{approved_url}/status')
     @limiter.limit('100/minute')
-    async def _(request: fastapi.Request, authorization: str = fastapi.Header(...)):
-        return await status.run(coordinator, request, authorization)
+    async def _(
+        job_id: str = fastapi.Query(..., description=API_STATUS_JOB_ID_DESCRIPTION),
+        _=fastapi.Depends(authentication.check)
+    ):
+        return await status.run(coordinator, job_id)
 
 # every client must have an approved url to access
 # (one url per client, which is also rate limited)
