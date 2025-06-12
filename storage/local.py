@@ -7,8 +7,8 @@ import sqlalchemy
 
 from datetime import timedelta
 
-import db
-import models
+from . import db
+from . import models
 
 from storage import interface
 from logger.client import Logger
@@ -31,8 +31,8 @@ class LocalStorage(interface.Storage):
     ) -> None:
         start = time.monotonic()
         job_dir = LocalStorage.mk_jobdir_if_needed(job_id)
-        stored_filename = LocalStorage.mk_stored_filename(job_dir, language)
         if language := LocalStorage.get_language_from(original_filename_in_repo):
+            stored_filename = LocalStorage.mk_stored_filename(job_dir, language)
             await LocalStorage.save_on_disk(content, stored_filename)
             LocalStorage.store_file_metadata_in_db(
                 models.FileMetadata(
@@ -44,7 +44,7 @@ class LocalStorage(interface.Storage):
             )
             end = time.monotonic()
             delta = end - start
-            Logger.info(
+            await Logger.info(
                 LogMessage(
                     file_unique_id=str(stored_filename),
                     job_id=job_id,
@@ -56,9 +56,9 @@ class LocalStorage(interface.Storage):
             )
             return
 
-        Logger.info(
+        await Logger.info(
             LogMessage(
-                file_unique_id=str(stored_filename),
+                file_unique_id=LocalStorage.get_unique_id(),
                 job_id=job_id,
                 context=Context.UPLOAD_FILE,
                 original_filename=original_filename_in_repo,
@@ -96,11 +96,12 @@ class LocalStorage(interface.Storage):
         original_filename_in_repo: str,
         job_id: str
     ) -> None:
+        start = time.monotonic()
         job_dir = LocalStorage.mk_jobdir_if_needed(job_id)
-        stored_filename = LocalStorage.mk_stored_filename(job_dir, language)
         if language := LocalStorage.get_language_from(original_filename_in_repo):
+            stored_filename = LocalStorage.mk_stored_filename(job_dir, language)
             await LocalStorage.save_on_disk(content, stored_filename)
-            store_ast_metadata_in_db(
+            LocalStorage.store_file_metadata_in_db(
                 models.FileMetadata(
                     str(stored_filename),
                     job_id,
@@ -108,11 +109,23 @@ class LocalStorage(interface.Storage):
                     language
                 )
             )
+            end = time.monotonic()
+            delta = end - start
+            await Logger.info(
+                LogMessage(
+                    file_unique_id=str(stored_filename),
+                    job_id=job_id,
+                    context=Context.UPLOAD_FILE,
+                    original_filename=original_filename_in_repo,
+                    language=language,
+                    duration=timedelta(seconds=delta)
+                )
+            )
             return
 
-        Logger.info(
+        await Logger.info(
             LogMessage(
-                file_unique_id=str(stored_filename),
+                file_unique_id=LocalStorage.get_unique_id(),
                 job_id=job_id,
                 context=Context.UPLOAD_FILE,
                 original_filename=original_filename_in_repo,
@@ -130,19 +143,22 @@ class LocalStorage(interface.Storage):
             async for chunk in content:
                 await fl.write(chunk)
 
+    @staticmethod
     def store_file_metadata_in_db(file_metadata: models.FileMetadata) -> None:
         with db.SessionLocal() as session:
             session.add(file_metadata)
             session.commit()
 
+    @staticmethod
     def store_ast_metadata_in_db(ast_metadata: models.AstMetadata) -> None:
         with db.SessionLocal() as session:
             session.add(ast_metadata)
             session.commit()
 
+    @staticmethod
     def load_files_metadata_from_db(job_id: str) -> list[models.FileMetadata]:
         with db.SessionLocal() as session:
-            condition_is_satisfied = models.FILES.c.job_id == job_id
+            condition_is_satisfied = models.FileMetadata.job_id == job_id
             stmt = sqlalchemy.select(models.FileMetadata).where(condition_is_satisfied)
             result = session.execute(stmt)
             return result.scalars().all()

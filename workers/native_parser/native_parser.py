@@ -5,6 +5,7 @@ import aiofiles
 import dataclasses
 
 from common.language import Language
+from storage.models import FileMetadata
 from workers.interface import AbstractWorker
 
 import storage
@@ -36,7 +37,7 @@ class NativeParser(AbstractWorker):
         self,
         session: aiohttp.ClientSession,
         job_id: str,
-        f: models.FileMetadata
+        f: FileMetadata
     ) -> None:
         code = await NativeParser.read_source_file(f.file_unique_id)
         content = await NativeParser.parse(session, code, f)
@@ -46,7 +47,7 @@ class NativeParser(AbstractWorker):
     async def parse(
         session: aiohttp.ClientSession,
         code: dict[str, typing.Tuple[str, bytes]],
-        f: models.FileMetadata
+        f: FileMetadata
     ) -> typing.Optional[str]:
         url = AST_BUILDER_URL[f.language]
         async with session.post(url, data=code) as response:
@@ -69,7 +70,7 @@ class NativeParser(AbstractWorker):
     # site-packages for python or vendor/bundle for ruby etc.)
     # pylint: disable=unused-argument
     @staticmethod
-    def scan_worthy(f: models.FileMetadata) -> bool:
+    def scan_worthy(f: FileMetadata) -> bool:
 
         if '/test/' in f.original_filename:
             return False

@@ -1,8 +1,8 @@
 import contextlib
 import fastapi
 
-import db
-import models
+from . import db
+from . import models
 
 app = fastapi.FastAPI()
 
@@ -13,7 +13,7 @@ async def lifespan(_: fastapi.FastAPI):
     yield
 
 @app.post("/log")
-def log(msg: models.LogMessage) -> None:
+def log(msg: models.LogMessage) -> fastapi.Response:
     with db.SessionLocal() as session:
         session.add(msg)
         session.commit()

@@ -10,7 +10,7 @@ from datetime import (
     timedelta
 )
 
-from language import Language
+from common.language import Language
 
 class StatusKind(str, enum.Enum):
 

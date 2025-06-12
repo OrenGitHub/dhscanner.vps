@@ -1,18 +1,28 @@
 import os
 import sys
-import logging
+import typing
 import fastapi
 import slowapi
+import logging
 
-import upload
-import status
-import analyze
+from . import upload
+from . import status
+from . import analyze
+from . import authentication
 
 from storage.interface import Storage
 from coordinator.interface import Coordinator
 from coordinator.redis import RedisCoordinator
 
 app = fastapi.FastAPI()
+
+API_UPLOAD_JOB_ID_DESCRIPTION: typing.Final[str] = """
+every uploaded file belongs to a job(id)
+"""
+
+API_UPLOAD_FILENAME_DESCRIPTION: typing.Final[str] = """
+relative filename with respect to the source directory root
+"""
 
 # pylint: disable=cell-var-from-loop,redefined-outer-name
 def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storage):
@@ -21,18 +31,24 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
 
     @app.post(f'api/{approved_url}/upload')
     @limiter.limit('1000/second')
-    async def _(request: fastapi.Request, authorization: str = fastapi.Header(...)):
-        return await upload.run(storage, request, authorization)
+    async def _(
+        request: fastapi.Request,
+        job_id: str = fastapi.Query(..., description=API_UPLOAD_JOB_ID_DESCRIPTION),
+        filename: str = fastapi.Header(..., alias="X-Path", description=API_UPLOAD_FILENAME_DESCRIPTION),
+        _1=fastapi.Depends(authentication.check),
+        _2=fastapi.Depends(content_type_check),
+    ):
+        return await upload.run(request, storage, job_id, filename)
 
     @app.post(f'api/{approved_url}/analyze')
     @limiter.limit('100/minute')
     async def _(request: fastapi.Request, authorization: str = fastapi.Header(...)):
-        return await analyze.run(request, authorization, coordinator)
+        return await analyze.run(coordinator, authorization)
 
     @app.post(f'api/{approved_url}/status')
     @limiter.limit('100/minute')
     async def _(request: fastapi.Request, authorization: str = fastapi.Header(...)):
-        return await status.run(request, authorization, coordinator)
+        return await status.run(coordinator, request, authorization)
 
 # every client must have an approved url to access
 # (one url per client, which is also rate limited)
@@ -49,6 +65,16 @@ def configure_logger() -> None:
         datefmt="%d/%m/%Y ( %H:%M:%S )",
         stream=sys.stdout
     )
+
+def content_type_check(content_type: str = fastapi.Header(..., alias='Content-Type')) -> bool:
+
+    if content_type != "application/octet-stream":
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Invalid content type"
+        )
+
+    return True
 
 def init(coordinator: Coordinator) -> None:
     configure_logger()

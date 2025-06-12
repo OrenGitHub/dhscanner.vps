@@ -1,20 +1,17 @@
 import json
 import redis
 import typing
-import datetime
 import dataclasses
 
-from coordinator import (
-    Coordinator,
-    Status
-)
-import coordinator
+from datetime import datetime
+
+from . import interface
 
 REDIS_HOST: typing.Final[str] = 'redis'
 REDIS_PORT: typing.Final[int] = 6379
 
 @dataclasses.dataclass(frozen=True)
-class RedisCoordinator(Coordinator):
+class RedisCoordinator(interface.Coordinator):
 
     host: typing.Final[str] = REDIS_HOST
     port: typing.Final[int] = REDIS_PORT
@@ -28,16 +25,16 @@ class RedisCoordinator(Coordinator):
         )
 
     @typing.override
-    def get_status(self, job_id: str) -> typing.Optional[Status]:
+    def get_status(self, job_id: str) -> typing.Optional[interface.Status]:
         if raw_bytes := self.get_status_bytes(job_id):
             if raw_str := self.get_status_string(raw_bytes):
                 if json_content := self.get_status_json(raw_str):
-                    if status := Status.from_dict(json_content):
+                    if status := interface.Status.from_dict(json_content):
                         return status
         return None
 
     @typing.override
-    def set_status(self, job_id: str, status: Status) -> None:
+    def set_status(self, job_id: str, status: interface.Status) -> None:
         status_as_dict = dataclasses.asdict(status)
         status_str = json.dumps(status_as_dict)
         status_bytes = status_str.encode('utf-8')
@@ -107,7 +104,7 @@ class RedisCoordinator(Coordinator):
     def mark_jobs_that_finished_step_0_and_now_wait_for_step_1(self, job_ids: list[str]) -> None:
         for job_id in job_ids:
             now = datetime.now()
-            native_parsing_finished = coordinator.NativeParsingFinished(now)
+            native_parsing_finished = interface.NativeParsingFinished(now)
             self.set_status(job_id, native_parsing_finished)
 
     def get_status_bytes(self, job_id: str) -> typing.Optional[bytes]:

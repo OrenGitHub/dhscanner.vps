@@ -3,7 +3,8 @@ import fastapi
 
 from datetime import datetime
 
-import authentication
+from . import authentication
+
 from coordinator.interface import (
     AnalysisStarted,
     Coordinator
@@ -18,8 +19,8 @@ async def run(
     job_id: str = fastapi.Query(..., description=API_ANALYZE_JOB_ID_DESCRIPTION),
     _=fastapi.Depends(authentication.check)
 ) -> dict:
-    analysis_started = AnalysisStarted(datetime.now())
-    coordinator.set_status(job_id, analysis_started)
+    status = AnalysisStarted(datetime.now())
+    coordinator.set_status(job_id, status)
     return analysis_started(job_id)
 
 def analysis_started(job_id: str) -> dict:

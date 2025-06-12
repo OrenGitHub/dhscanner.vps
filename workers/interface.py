@@ -4,7 +4,7 @@ import typing
 import asyncio
 import dataclasses
 
-from coordinator import Coordinator
+from coordinator import interface
 
 class JobDescription(str, enum.Enum):
     NATIVE_PARSER = 'NATIVE_PARSER'
@@ -13,7 +13,7 @@ class JobDescription(str, enum.Enum):
 @dataclasses.dataclass(frozen=True)
 class AbstractWorker(abc.ABC):
 
-    the_coordinator: Coordinator
+    the_coordinator: interface.Coordinator
     job_description: JobDescription
 
     @typing.final
