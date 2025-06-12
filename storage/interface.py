@@ -20,7 +20,7 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_file(self, f: FileMetadata) -> bytes:
+    async def load_file(self, f: FileMetadata) -> typing.Optional[bytes]:
         ...
 
     @abc.abstractmethod

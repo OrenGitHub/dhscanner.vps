@@ -56,22 +56,3 @@ class Logger:
     @staticmethod
     async def debug(message: LogMessage):
         await Logger.send(message, Level.DEBUG)
-
-    @asynccontextmanager
-    async def time_this_info_msg(self, context: Context, f: FileMetadata):
-        start = time.monotonic()
-        try:
-            yield
-        finally:
-            delta = time.monotonic() - start
-            await self.info(
-                LogMessage(
-                    file_unique_id=f.file_unique_id,
-                    job_id=f.job_id,
-                    context=context,
-                    original_filename=f.original_filename,
-                    language=f.language,
-                    duration=timedelta(seconds=delta)
-                )
-            )
-

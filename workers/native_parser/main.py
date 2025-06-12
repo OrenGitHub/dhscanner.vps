@@ -6,8 +6,8 @@ import aiohttp
 import dataclasses
 
 from common.language import Language
-from logger.models import Context, LogMessage
 from storage.models import FileMetadata
+from logger.models import Context, LogMessage
 from workers.interface import AbstractWorker
 
 import storage
@@ -41,25 +41,57 @@ class NativeParser(AbstractWorker):
         job_id: str,
         f: FileMetadata
     ) -> None:
-        
-        async with self.the_logger_dude.time_this_info_msg(Context.NATIVE_PARSER, f):
-            code = await self.read_source_file(f)
-            content = await NativeParser.parse(session, code, f)
-            await storage.store_ast(content, f, job_id)
 
-    @staticmethod
+        if code := await self.read_source_file(f):
+            if content := await self.parse(session, code, f):
+                await storage.store_ast(content, f, job_id)
+
     async def parse(
+        self,
         session: aiohttp.ClientSession,
         code: dict[str, typing.Tuple[str, bytes]],
         f: FileMetadata
     ) -> typing.Optional[str]:
+        start = time.monotonic()
         url = AST_BUILDER_URL[f.language]
-        async with session.post(url, data=code) as response:
-            return await response.text()
+        try:
+            async with session.post(url, data=code) as response:
+                if response.status == 200:
+                    end = time.monotonic()
+                    delta = end - start
+                    native_ast = await response.text()
+                    await self.the_logger_dude.info(
+                        LogMessage(
+                            file_unique_id=f.file_unique_id,
+                            job_id=f.job_id,
+                            context=Context.NATIVE_PARSING_SUCCEEDED,
+                            original_filename=f.original_filename,
+                            language=f.language,
+                            duration=timedelta(seconds=delta)
+                        )
+                    )
+                    return native_ast
+
+        except aiohttp.ClientError:
+            pass
+
+        end = time.monotonic()
+        delta = end - start
+        await self.the_logger_dude.info(
+            LogMessage(
+                file_unique_id=f.file_unique_id,
+                job_id=f.job_id,
+                context=Context.NATIVE_PARSING_FAILED,
+                original_filename=f.original_filename,
+                language=f.language,
+                duration=timedelta(seconds=delta)
+            )
+        )
+        return None
 
     async def read_source_file(self, f: FileMetadata) -> dict[str, typing.Tuple[str, bytes]]:
-        code = await self.the_storage_guy.load_file(f)
-        return { 'source': (f.original_filename, code) }
+        if code := await self.the_storage_guy.load_file(f):
+            return { 'source': (f.original_filename, code) }
 
     # TODO: adjust other reasons for exclusion
     # the reasons might depend on the language

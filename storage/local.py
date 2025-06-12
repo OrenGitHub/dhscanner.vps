@@ -68,9 +68,44 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def load_file(self, f: models.FileMetadata) -> bytes:
-        async with aiofiles.open(f.file_unique_id, 'rb') as fl:
-            return await fl.read()
+    async def load_file(self, f: models.FileMetadata) -> typing.Optional[bytes]:
+        try:
+            start = time.monotonic()
+            async with aiofiles.open(f.file_unique_id, 'rb') as fl:
+                content = await fl.read()
+                end = time.monotonic()
+                delta = end - start
+                await Logger.warning(
+                    LogMessage(
+                        file_unique_id=f.file_unique_id,
+                        job_id=f.job_id,
+                        context=Context.READ_SOURCE_FILE_SUCCEEDED,
+                        original_filename=f.original_filename,
+                        language=f.language,
+                        duration=timedelta(seconds=delta)
+                    )
+                )
+                return content
+
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pass
+
+        end = time.monotonic()
+        delta = end - start
+        await Logger.warning(
+            LogMessage(
+                file_unique_id=f.file_unique_id,
+                job_id=f.job_id,
+                context=Context.READ_SOURCE_FILE_FAILED,
+                original_filename=f.original_filename,
+                language=f.language,
+                duration=timedelta(seconds=delta)
+            )
+        )
+
+        return None
 
     @staticmethod
     def mk_jobdir_if_needed(job_id: str) -> pathlib.Path:
