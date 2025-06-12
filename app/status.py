@@ -1,8 +1,5 @@
-import typing
-import fastapi
 import dataclasses
 
-from app import authentication
 from coordinator.interface import Coordinator
 
 async def run(coordinator: Coordinator, job_id: str) -> dict:
