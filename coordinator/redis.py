@@ -3,8 +3,6 @@ import redis
 import typing
 import dataclasses
 
-from datetime import datetime
-
 from . import interface
 
 REDIS_HOST: typing.Final[str] = 'redis'
@@ -41,16 +39,20 @@ class RedisCoordinator(interface.Coordinator):
         self.redis_client.set(job_id, status_bytes)
 
     @typing.override
-    def get_jobs_waiting_for_step_0_native_parsing(self) -> list[str]:
+    def get_jobs_waiting_for(self, desired_status: interface.Status) -> list[str]:
         keys = self.redis_client.keys('*')
         job_ids = []
         for key in keys:
             job_id = key.decode('utf-8')
-            if status := self.get_status(job_id):
-                if status.wait_for_step_0_native_parsing():
+            if job_status := self.get_status(job_id):
+                if job_status.is_the_same_as(desired_status):
                     job_ids.append(job_id)
 
         return job_ids
+
+    @typing.override
+    def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        self.redis_client.delete(*job_ids)
 
     @typing.override
     def get_jobs_waiting_for_step_1_dhscanner_parsing(self) -> list[str]:
@@ -63,49 +65,6 @@ class RedisCoordinator(interface.Coordinator):
                     job_ids.append(job_id)
 
         return job_ids
-
-    @typing.override
-    def get_jobs_waiting_for_step_2_code_generation(self) -> list[str]:
-        keys = self.redis_client.keys('*')
-        job_ids = []
-        for key in keys:
-            job_id = key.decode('utf-8')
-            if status := self.get_status(job_id):
-                if status.wait_for_step_2_code_generation():
-                    job_ids.append(job_id)
-
-        return job_ids
-
-    @typing.override
-    def get_jobs_waiting_for_step_3_knwoledge_base_generation(self) -> list[str]:
-        keys = self.redis_client.keys('*')
-        job_ids = []
-        for key in keys:
-            job_id = key.decode('utf-8')
-            if status := self.get_status(job_id):
-                if status.wait_for_step_3_knowledge_base_generation():
-                    job_ids.append(job_id)
-
-        return job_ids
-
-    @typing.override
-    def get_jobs_waiting_for_step_4_query_engine(self) -> list[str]:
-        keys = self.redis_client.keys('*')
-        job_ids = []
-        for key in keys:
-            job_id = key.decode('utf-8')
-            if status := self.get_status(job_id):
-                if status.wait_for_step_4_query_engine():
-                    job_ids.append(job_id)
-
-        return job_ids
-
-    @typing.override
-    def mark_jobs_that_finished_step_0_and_now_wait_for_step_1(self, job_ids: list[str]) -> None:
-        for job_id in job_ids:
-            now = datetime.now()
-            native_parsing_finished = interface.NativeParsingFinished(now)
-            self.set_status(job_id, native_parsing_finished)
 
     def get_status_bytes(self, job_id: str) -> typing.Optional[bytes]:
         return self.redis_client.get(job_id)

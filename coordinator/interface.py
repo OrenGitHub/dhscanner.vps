@@ -69,21 +69,9 @@ class Status(abc.ABC):
             return deserialization_func(content)
         
         return None
-    
-    def wait_for_step_0_native_parsing(self) -> bool:
-        return False
 
-    def wait_for_step_1_dhscanner_parsing(self) -> bool:
-        return False
-
-    def wait_for_step_2_code_generation(self) -> bool:
-        return False
-
-    def wait_for_step_3_knowledge_base_generation(self) -> bool:
-        return False
-
-    def wait_for_step_4_query_engine(self) -> bool:
-        return False
+    def is_the_same_as(self, other: Status) -> bool:
+        return type(self) is type(other)
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class StatsLanguage:
@@ -282,25 +270,9 @@ class Coordinator(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def get_jobs_waiting_for_step_0_native_parsing(self) -> list[str]:
+    def get_jobs_waiting_for(self, desired_status: Status) -> list[str]:
         ...
 
     @abc.abstractmethod
-    def get_jobs_waiting_for_step_1_dhscanner_parsing(self) -> list[str]:
-        ...
-
-    @abc.abstractmethod
-    def get_jobs_waiting_for_step_2_code_generation(self) -> list[str]:
-        ...
-
-    @abc.abstractmethod
-    def get_jobs_waiting_for_step_3_knwoledge_base_generation(self) -> list[str]:
-        ...
-
-    @abc.abstractmethod
-    def get_jobs_waiting_for_step_4_query_engine(self) -> list[str]:
-        ...
-
-    @abc.abstractmethod
-    def mark_jobs_that_finished_step_0_and_now_wait_for_step_1(self) -> None:
+    def mark_jobs_finished(self, job_ids: list[str]) -> None:
         ...

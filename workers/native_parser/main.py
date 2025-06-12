@@ -32,19 +32,18 @@ class NativeParser(AbstractWorker):
         files = self.the_storage_guy.load_files_metadata_from_db(job_id)
         async with aiohttp.ClientSession() as session:
             scan = NativeParser.scan_worthy
-            tasks = [self.run_single_file(session, job_id, f) for f in files if scan(f)]
+            tasks = [self.run_single_file(session, f) for f in files if scan(f)]
             await asyncio.gather(*tasks)
 
     async def run_single_file(
         self,
         session: aiohttp.ClientSession,
-        job_id: str,
         f: FileMetadata
     ) -> None:
 
         if code := await self.read_source_file(f):
             if content := await self.parse(session, code, f):
-                await storage.store_ast(content, f, job_id)
+                await storage.store_ast(content, f)
 
     async def parse(
         self,

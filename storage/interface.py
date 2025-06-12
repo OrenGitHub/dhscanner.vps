@@ -5,7 +5,10 @@ import dataclasses
 import sqlalchemy
 
 from storage import db
-from storage.models import FileMetadata
+from storage.models import (
+    FileMetadata,
+    AstMetadata,
+)
 
 @dataclasses.dataclass(frozen=True)
 class Storage(abc.ABC):
@@ -65,3 +68,11 @@ class Storage(abc.ABC):
             stmt = sqlalchemy.select(FileMetadata).where(condition_is_satisfied)
             result = session.execute(stmt).scalars().all()
             return typing.cast(list[FileMetadata], result)
+
+    @staticmethod
+    def load_asts_metadata_from_db(job_id: str) -> list[AstMetadata]:
+        with db.SessionLocal() as session:
+            condition_is_satisfied = AstMetadata.job_id == job_id
+            stmt = sqlalchemy.select(AstMetadata).where(condition_is_satisfied)
+            result = session.execute(stmt).scalars().all()
+            return typing.cast(list[AstMetadata], result)
