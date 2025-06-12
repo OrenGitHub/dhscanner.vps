@@ -2,6 +2,8 @@ import abc
 import typing
 import dataclasses
 
+from storage.models import FileMetadata
+
 @dataclasses.dataclass(frozen=True)
 class Storage(abc.ABC):
 
@@ -12,6 +14,10 @@ class Storage(abc.ABC):
         original_filename_in_repo: str,
         job_id: str
     ) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def load_file(self, f: FileMetadata) -> bytes:
         ...
 
     @abc.abstractmethod

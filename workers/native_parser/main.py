@@ -1,7 +1,6 @@
 import typing
 import asyncio
 import aiohttp
-import aiofiles
 import dataclasses
 
 from common.language import Language
@@ -39,7 +38,7 @@ class NativeParser(AbstractWorker):
         job_id: str,
         f: FileMetadata
     ) -> None:
-        code = await NativeParser.read_source_file(f.file_unique_id)
+        code = await self.read_source_file(f)
         content = await NativeParser.parse(session, code, f)
         await storage.store_ast(content, f, job_id)
 
@@ -53,16 +52,9 @@ class NativeParser(AbstractWorker):
         async with session.post(url, data=code) as response:
             return await response.text()
 
-    @staticmethod
-    async def read_source_file(
-        filename: str,
-        original_filename: str
-    ) -> dict[str, typing.Tuple[str, bytes]]:
-
-        async with aiofiles.open(filename, 'rb') as f:
-            code = await f.read()
-
-        return { 'source': (original_filename, code) }
+    async def read_source_file(self, f: FileMetadata) -> dict[str, typing.Tuple[str, bytes]]:
+        code = await self.the_storage_guy.load_file(f)
+        return { 'source': (f.original_filename, code) }
 
     # TODO: adjust other reasons for exclusion
     # the reasons might depend on the language

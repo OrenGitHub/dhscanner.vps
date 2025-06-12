@@ -67,6 +67,11 @@ class LocalStorage(interface.Storage):
             )
         )
 
+    @typing.override
+    async def load_file(self, f: models.FileMetadata) -> bytes:
+        async with aiofiles.open(f.file_unique_id, 'rb') as fl:
+            return await fl.read()
+
     @staticmethod
     def mk_jobdir_if_needed(job_id: str) -> pathlib.Path:
         job_dir = BASEDIR / job_id

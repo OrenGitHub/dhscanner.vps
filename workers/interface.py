@@ -4,7 +4,9 @@ import typing
 import asyncio
 import dataclasses
 
-from coordinator import interface
+from logger.client import Logger
+from storage.interface import Storage
+from coordinator.interface import Coordinator
 
 class JobDescription(str, enum.Enum):
     NATIVE_PARSER = 'NATIVE_PARSER'
@@ -13,8 +15,9 @@ class JobDescription(str, enum.Enum):
 @dataclasses.dataclass(frozen=True)
 class AbstractWorker(abc.ABC):
 
-    the_coordinator: interface.Coordinator
-    job_description: JobDescription
+    the_logger_dude: Logger
+    the_storage_guy: Storage
+    the_coordinator: Coordinator
 
     @typing.final
     def check_in(self) -> None:

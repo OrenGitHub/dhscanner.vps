@@ -13,8 +13,8 @@ REDIS_PORT: typing.Final[int] = 6379
 @dataclasses.dataclass(frozen=True)
 class RedisCoordinator(interface.Coordinator):
 
-    host: typing.Final[str] = REDIS_HOST
-    port: typing.Final[int] = REDIS_PORT
+    host: str = dataclasses.field(default=REDIS_HOST, init=False)
+    port: int = dataclasses.field(default=REDIS_PORT, init=False)
  
     redis_client: redis.Redis = dataclasses.field(init=False)
 
