@@ -4,10 +4,10 @@ import asyncio
 import aiofiles
 import dataclasses
 
-import models
 import storage
 
 from common.language import Language
+from storage.models import FileMetadata
 from workers.interface import AbstractWorker
 
 DHSCANNER_AST_BUILDER_URL = {
@@ -34,7 +34,7 @@ class DhscannerParser(AbstractWorker):
         self,
         session: aiohttp.ClientSession,
         job_id: str,
-        f: models.FileMetadata
+        f: FileMetadata
     ) -> None:
         ast = await DhscannerParser.read_ast_file(f.file_unique_id)
         dhscanner_ast = await DhscannerParser.parse(session, ast, f)
@@ -44,7 +44,7 @@ class DhscannerParser(AbstractWorker):
     async def parse(
         session: aiohttp.ClientSession,
         code: dict[str, typing.Tuple[str, bytes]],
-        f: models.FileMetadata
+        f: FileMetadata
     ) -> typing.Optional[str]:
         url = DHSCANNER_AST_BUILDER_URL[f.language]
         async with session.post(url, data=code) as response:

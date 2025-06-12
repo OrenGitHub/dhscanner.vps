@@ -1,5 +1,8 @@
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 import sqlalchemy
+
+from sqlalchemy.orm import DeclarativeBase # type: ignore[attr-defined]
+from sqlalchemy.orm import Mapped # type: ignore[attr-defined]
+from sqlalchemy.orm import mapped_column # type: ignore[attr-defined]
 
 from common.language import Language
 
