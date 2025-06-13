@@ -2,12 +2,9 @@ import time
 import typing
 import aiohttp
 import asyncio
-import aiofiles
 import dataclasses
 
 from datetime import timedelta
-
-import storage
 
 from logger.models import (
     Context,
@@ -15,8 +12,8 @@ from logger.models import (
 )
 
 from common.language import Language
-from storage.models import AstMetadata, FileMetadata
 from workers.interface import AbstractWorker
+from storage.models import NativeAstMetadata
 
 DHSCANNER_AST_BUILDER_URL = {
     Language.JS: 'http://parsers:3000/from/js/to/dhscanner/ast',
@@ -42,20 +39,20 @@ class DhscannerParser(AbstractWorker):
     async def run_single_ast(
         self,
         session: aiohttp.ClientSession,
-        f: FileMetadata
+        a: NativeAstMetadata
     ) -> None:
-        if native_ast := await self.read_native_ast_file(f):
-            if content := await self.parse(session, native_ast, f):
-                await storage.store_dhscanner_ast(content, f)
+        if native_ast := await self.read_native_ast_file(a):
+            if content := await self.parse(session, native_ast, a):
+                await self.the_storage_guy.save_dhscanner_ast(content, a)
 
     async def parse(
         self,
         session: aiohttp.ClientSession,
         code: dict[str, typing.Tuple[str, bytes]],
-        f: FileMetadata
+        a: NativeAstMetadata
     ) -> typing.Optional[str]:
         start = time.monotonic()
-        url = DHSCANNER_AST_BUILDER_URL[f.language]
+        url = DHSCANNER_AST_BUILDER_URL[a.language]
         try:
             async with session.post(url, data=code) as response:
                 if response.status == 200:
@@ -64,11 +61,11 @@ class DhscannerParser(AbstractWorker):
                     dhscanner_ast = await response.text()
                     await self.the_logger_dude.info(
                         LogMessage(
-                            file_unique_id=f.file_unique_id,
-                            job_id=f.job_id,
+                            file_unique_id=a.file_unique_id,
+                            job_id=a.job_id,
                             context=Context.DHSCANNER_PARSING_SUCCEEDED,
-                            original_filename=f.original_filename,
-                            language=f.language,
+                            original_filename=a.original_filename,
+                            language=a.language,
                             duration=timedelta(seconds=delta)
                         )
                     )
@@ -81,15 +78,19 @@ class DhscannerParser(AbstractWorker):
         delta = end - start
         await self.the_logger_dude.info(
             LogMessage(
-                file_unique_id=f.file_unique_id,
-                job_id=f.job_id,
+                file_unique_id=a.file_unique_id,
+                job_id=a.job_id,
                 context=Context.DHSCANNER_PARSER_FAILED,
-                original_filename=f.original_filename,
-                language=f.language,
+                original_filename=a.original_filename,
+                language=a.language,
                 duration=timedelta(seconds=delta)
             )
         )
 
-    async def read_native_ast_file(self, f: AstMetadata) -> dict[str, typing.Tuple[str, bytes]]:
-        if code := await self.the_storage_guy.load_file(f):
-            return { 'source': (f.original_filename, code) }
+    async def read_native_ast_file(
+        self, a: NativeAstMetadata
+    ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
+        if code := await self.the_storage_guy.load_native_ast(a):
+            return { 'source': (a.original_filename, code) }
+        
+        return None

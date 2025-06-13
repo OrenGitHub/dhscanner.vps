@@ -3,7 +3,6 @@ import time
 import typing
 import pathlib
 import aiofiles
-import sqlalchemy
 
 from datetime import timedelta
 
@@ -107,6 +106,62 @@ class LocalStorage(interface.Storage):
 
         return None
 
+    @typing.override
+    async def save_native_ast(self, content: str, f: models.FileMetadata) -> None:
+
+        native_ast = f'{f.stored_filename}.native.ast'
+        async with aiofiles.open(native_ast, 'wt') as fl:
+            await fl.write(content)
+        
+        LocalStorage.store_native_ast_metadata_in_db(
+            models.NativeAstMetadata(
+                native_ast,
+                f.job_id,
+                f.original_filename,
+                f.language
+            )
+        )
+
+    @typing.override
+    async def load_native_ast(self, a: models.NativeAstMetadata) -> typing.Optional[str]:
+        try:
+            start = time.monotonic()
+            async with aiofiles.open(a.native_ast_unique_id, 'rt') as fl:
+                content = await fl.read()
+                end = time.monotonic()
+                delta = end - start
+                await Logger.warning(
+                    LogMessage(
+                        file_unique_id=a.file_unique_id,
+                        job_id=a.job_id,
+                        context=Context.READ_NATIVE_AST_FILE_SUCCEEDED,
+                        original_filename=a.original_filename,
+                        language=a.language,
+                        duration=timedelta(seconds=delta)
+                    )
+                )
+                return content
+
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pass
+
+        end = time.monotonic()
+        delta = end - start
+        await Logger.warning(
+            LogMessage(
+                file_unique_id=a.file_unique_id,
+                job_id=a.job_id,
+                context=Context.READ_NATIVE_AST_FILE_FAILED,
+                original_filename=a.original_filename,
+                language=a.language,
+                duration=timedelta(seconds=delta)
+            )
+        )
+
+        return None
+
     @staticmethod
     def mk_jobdir_if_needed(job_id: str) -> pathlib.Path:
         job_dir = BASEDIR / job_id
@@ -129,51 +184,6 @@ class LocalStorage(interface.Storage):
         unique_id = LocalStorage.get_unique_id()
         return job_dir / f'{unique_id}.{language.value}'
 
-    @typing.override
-    async def save_ast(
-        self,
-        content: typing.AsyncIterator[bytes],
-        original_filename_in_repo: str,
-        job_id: str
-    ) -> None:
-        start = time.monotonic()
-        job_dir = LocalStorage.mk_jobdir_if_needed(job_id)
-        if language := LocalStorage.get_language_from(original_filename_in_repo):
-            stored_filename = LocalStorage.mk_stored_filename(job_dir, language)
-            await LocalStorage.save_on_disk(content, stored_filename)
-            LocalStorage.store_file_metadata_in_db(
-                models.FileMetadata(
-                    str(stored_filename),
-                    job_id,
-                    original_filename_in_repo,
-                    language
-                )
-            )
-            end = time.monotonic()
-            delta = end - start
-            await Logger.info(
-                LogMessage(
-                    file_unique_id=str(stored_filename),
-                    job_id=job_id,
-                    context=Context.UPLOAD_FILE,
-                    original_filename=original_filename_in_repo,
-                    language=language,
-                    duration=timedelta(seconds=delta)
-                )
-            )
-            return
-
-        await Logger.info(
-            LogMessage(
-                file_unique_id=LocalStorage.get_unique_id(),
-                job_id=job_id,
-                context=Context.UPLOAD_FILE,
-                original_filename=original_filename_in_repo,
-                language=Language.UNKNOWN,
-                duration=timedelta(0)
-            )
-        )
-
     @staticmethod
     async def save_on_disk(
         content: typing.AsyncIterator[bytes],
@@ -184,13 +194,19 @@ class LocalStorage(interface.Storage):
                 await fl.write(chunk)
 
     @staticmethod
-    def store_file_metadata_in_db(file_metadata: models.FileMetadata) -> None:
+    def store_file_metadata_in_db(f: models.FileMetadata) -> None:
         with db.SessionLocal() as session:
-            session.add(file_metadata)
+            session.add(f)
             session.commit()
 
     @staticmethod
-    def store_ast_metadata_in_db(ast_metadata: models.AstMetadata) -> None:
+    def store_native_ast_metadata_in_db(a: models.NativeAstMetadata) -> None:
         with db.SessionLocal() as session:
-            session.add(ast_metadata)
+            session.add(a)
+            session.commit()
+
+    @staticmethod
+    def store_dhscanner_ast_metadata_in_db(a: models.DhscannerAstMetadata) -> None:
+        with db.SessionLocal() as session:
+            session.add(a)
             session.commit()

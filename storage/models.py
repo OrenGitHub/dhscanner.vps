@@ -18,11 +18,30 @@ class FileMetadata(Base):
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
 
-class AstMetadata(Base):
+class NativeAstMetadata(Base):
 
-    __tablename__ = 'asts'
+    __tablename__ = 'native_asts'
 
-    ast_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    native_ast_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
+
+class DhscannerAstMetadata(Base):
+
+    __tablename__ = 'dhscanner_asts'
+
+    dhscanner_ast_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
+
+class CallablesMetadata(Base):
+
+    __tablename__ = 'callables'
+
+    callable_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    num_callables: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=False)
     job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)

@@ -1,16 +1,15 @@
-from datetime import timedelta
 import time
 import typing
 import asyncio
 import aiohttp
 import dataclasses
 
+from datetime import timedelta
+
 from common.language import Language
 from storage.models import FileMetadata
 from logger.models import Context, LogMessage
 from workers.interface import AbstractWorker
-
-import storage
 
 AST_BUILDER_URL = {
     Language.JS: 'http://frontjs:3000/to/esprima/js/ast',
@@ -43,7 +42,7 @@ class NativeParser(AbstractWorker):
 
         if code := await self.read_source_file(f):
             if content := await self.parse(session, code, f):
-                await storage.store_ast(content, f)
+                await self.the_storage_guy.save_native_ast(content, f)
 
     async def parse(
         self,

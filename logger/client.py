@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 import http
-import time
 import typing
 import aiohttp
 import asyncio
 import dataclasses
 
-from datetime import timedelta
-
-from contextlib import asynccontextmanager
-
-from storage.models import FileMetadata
-from logger.models import Context, Level, LogMessage
+from logger.models import Level, LogMessage
 
 MAX_RETRIES: typing.Final[int] = 3
 RETRY_DELAY: typing.Final[float] = 0.5

@@ -1,13 +1,14 @@
 import abc
 import typing
-import dataclasses
-
 import sqlalchemy
+import dataclasses
 
 from storage import db
 from storage.models import (
+    CallablesMetadata,
+    DhscannerAstMetadata,
     FileMetadata,
-    AstMetadata,
+    NativeAstMetadata,
 )
 
 @dataclasses.dataclass(frozen=True)
@@ -27,30 +28,35 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def save_ast(
-        self,
-        content: typing.AsyncIterator[bytes],
-        original_filename_in_repo: str,
-        job_id: str
-    ) -> None:
+    async def save_native_ast(self, content: str, f: FileMetadata) -> None:
         ...
 
     @abc.abstractmethod
-    async def save_callable(
-        self,
-        content: typing.AsyncIterator[bytes],
-        original_filename_in_repo: str,
-        job_id: str
-    ) -> None:
+    async def load_native_ast(self, a: NativeAstMetadata) -> typing.Optional[str]:
         ...
 
     @abc.abstractmethod
-    async def save_knowledge_base_facts(
-        self,
-        content: typing.AsyncIterator[bytes],
-        original_filename_in_repo: str,
-        job_id: str
-    ) -> None:
+    async def save_dhscanner_ast(self, content: str, a: NativeAstMetadata) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def load_dhscanner_ast(self, a: DhscannerAstMetadata) -> typing.Optional[str]:
+        ...
+
+    @abc.abstractmethod
+    async def save_callables(self, content: dict, a: DhscannerAstMetadata) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def load_callables(self, a: CallablesMetadata) -> typing.Optional[str]:
+        ...
+
+    @abc.abstractmethod
+    async def save_knowledge_base_facts(self, content: list[str], c: CallablesMetadata) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def load_knowledge_base_facts(self, a: KnowledgeBaseFactsMetadata) -> typing.Optional[str]:
         ...
 
     @abc.abstractmethod
@@ -70,9 +76,9 @@ class Storage(abc.ABC):
             return typing.cast(list[FileMetadata], result)
 
     @staticmethod
-    def load_asts_metadata_from_db(job_id: str) -> list[AstMetadata]:
+    def load_asts_metadata_from_db(job_id: str) -> list[NativeAstMetadata]:
         with db.SessionLocal() as session:
-            condition_is_satisfied = AstMetadata.job_id == job_id
-            stmt = sqlalchemy.select(AstMetadata).where(condition_is_satisfied)
+            condition_is_satisfied = NativeAstMetadata.job_id == job_id
+            stmt = sqlalchemy.select(NativeAstMetadata).where(condition_is_satisfied)
             result = session.execute(stmt).scalars().all()
-            return typing.cast(list[AstMetadata], result)
+            return typing.cast(list[NativeAstMetadata], result)
