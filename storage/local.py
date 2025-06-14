@@ -159,10 +159,10 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def load_native_ast(self, a: models.NativeAstMetadata) -> typing.Optional[str]:
+    async def load_native_ast(self, a: models.NativeAstMetadata) -> typing.Optional[bytes]:
         try:
             start = time.monotonic()
-            async with aiofiles.open(a.native_ast_unique_id, 'rt') as fl:
+            async with aiofiles.open(a.native_ast_unique_id, 'rb') as fl:
                 content = await fl.read()
                 end = time.monotonic()
                 delta = end - start
@@ -250,10 +250,10 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def load_dhscanner_ast(self, a: models.DhscannerAstMetadata) -> typing.Optional[str]:
+    async def load_dhscanner_ast(self, a: models.DhscannerAstMetadata) -> typing.Optional[bytes]:
         try:
             start = time.monotonic()
-            async with aiofiles.open(a.native_ast_unique_id, 'rt') as fl:
+            async with aiofiles.open(a.native_ast_unique_id, 'rb') as fl:
                 content = await fl.read()
                 end = time.monotonic()
                 delta = end - start

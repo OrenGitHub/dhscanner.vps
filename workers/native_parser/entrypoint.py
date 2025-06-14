@@ -1,6 +1,6 @@
-from . import main
+from native_parser import main
 from logger.client import Logger
-
+from coordinator.interface import Status
 from storage.current import get_current_storage_method
 from coordinator.current import get_current_coordinator_between_workers
 
@@ -9,6 +9,7 @@ if __name__ == '__main__':
     worker = main.NativeParser(
         logger,
         get_current_storage_method(logger),
-        get_current_coordinator_between_workers()
+        get_current_coordinator_between_workers(),
+        Status.WaitingForNativeParsing
     )
     worker.check_in()

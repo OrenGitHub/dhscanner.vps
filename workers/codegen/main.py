@@ -76,12 +76,10 @@ class Codegen(AbstractWorker):
         )
         return None
 
-def codegen(dhscanner_asts):
-
-    callables = []
-    for ast in dhscanner_asts:
-        response = requests.post(TO_CODEGEN_URL, json=ast)
-        more_callables = json.loads(response.text)['actualCallables']
-        callables.extend(more_callables)
-
-    return callables
+    async def read_dhscanner_ast_file(
+        self, a: DhscannerAstMetadata
+    ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
+        if code := await self.the_storage_guy.load_dhscanner_ast(a):
+            return { 'source': (a.original_filename, code) }
+        
+        return None

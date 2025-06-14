@@ -6,7 +6,7 @@ import dataclasses
 
 from logger.client import Logger
 from storage.interface import Storage
-from coordinator.interface import Coordinator
+from coordinator.interface import Coordinator, Status
 
 class JobDescription(str, enum.Enum):
     NATIVE_PARSER = 'NATIVE_PARSER'
@@ -18,6 +18,7 @@ class AbstractWorker(abc.ABC):
     the_logger_dude: Logger
     the_storage_guy: Storage
     the_coordinator: Coordinator
+    status: Status
 
     @typing.final
     def check_in(self) -> None:
@@ -26,7 +27,7 @@ class AbstractWorker(abc.ABC):
     @typing.final
     async def worker_loop(self) -> None:
         while True:
-            job_ids = self.the_coordinator.get_jobs_with(self.job_description)
+            job_ids = self.the_coordinator.get_jobs_waiting_for(self.status)
             await self.worker_loop_internal(job_ids)
             self.the_coordinator.mark_jobs_finished(job_ids)
             await asyncio.sleep(1)

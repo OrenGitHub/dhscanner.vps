@@ -33,7 +33,7 @@ class RedisCoordinator(interface.Coordinator):
 
     @typing.override
     def set_status(self, job_id: str, status: interface.Status) -> None:
-        status_as_dict = dataclasses.asdict(status)
+        status_as_dict = {'status': f'{status.value}'}
         status_str = json.dumps(status_as_dict)
         status_bytes = status_str.encode('utf-8')
         self.redis_client.set(job_id, status_bytes)

@@ -3,7 +3,6 @@ import time
 import typing
 import aiohttp
 import asyncio
-import requests
 import dataclasses
 
 from datetime import timedelta
@@ -44,9 +43,9 @@ class Kbgen(AbstractWorker):
         try:
             async with session.post(TO_KBGEN_URL, data=code) as response:
                 if response.status == 200:
+                    dhscanner_ast = await response.text()
                     end = time.monotonic()
                     delta = end - start
-                    dhscanner_ast = await response.text()
                     await self.the_logger_dude.info(
                         LogMessage(
                             file_unique_id=c.file_unique_id,

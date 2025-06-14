@@ -1,7 +1,8 @@
-import dataclasses
 import re
 import typing
+import dataclasses
 
+from results import generate_sarif
 
 def patternify(suffix: str) -> str:
     start = r'startloc_(\d+)_(\d+)'
@@ -13,7 +14,11 @@ def patternify(suffix: str) -> str:
     query = r'q(\d+)'
     return fr'{query}\(\[{path}\]\): yes'
 
-def sinkify(match: re.Match, filename: str, offsets: dict[str, dict[int, int]]) -> typing.Optional[generate_sarif.Region]:
+def sinkify(
+    match: re.Match,
+    filename: str,
+    offsets: dict[str, dict[int, int]]
+) -> typing.Optional[generate_sarif.Region]:
 
     n = len(match.groups())
     for i in reversed(range(5, n)):
