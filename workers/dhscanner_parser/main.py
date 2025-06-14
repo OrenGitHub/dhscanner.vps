@@ -31,7 +31,7 @@ class DhscannerParser(AbstractWorker):
 
     @typing.override
     async def run(self, job_id: str) -> None:
-        asts = self.the_storage_guy.load_asts_metadata_from_db(job_id)
+        asts = self.the_storage_guy.load_native_asts_metadata_from_db(job_id)
         async with aiohttp.ClientSession() as session:
             tasks = [self.run_single_ast(session, f) for f in asts]
             await asyncio.gather(*tasks)
@@ -86,6 +86,7 @@ class DhscannerParser(AbstractWorker):
                 duration=timedelta(seconds=delta)
             )
         )
+        return None
 
     async def read_native_ast_file(
         self, a: NativeAstMetadata

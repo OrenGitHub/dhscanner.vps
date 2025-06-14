@@ -43,6 +43,7 @@ class NativeParser(AbstractWorker):
         if code := await self.read_source_file(f):
             if content := await self.parse(session, code, f):
                 await self.the_storage_guy.save_native_ast(content, f)
+                await self.the_storage_guy.delete_file(f)
 
     async def parse(
         self,
@@ -55,9 +56,9 @@ class NativeParser(AbstractWorker):
         try:
             async with session.post(url, data=code) as response:
                 if response.status == 200:
+                    native_ast = await response.text()
                     end = time.monotonic()
                     delta = end - start
-                    native_ast = await response.text()
                     await self.the_logger_dude.info(
                         LogMessage(
                             file_unique_id=f.file_unique_id,
@@ -87,9 +88,13 @@ class NativeParser(AbstractWorker):
         )
         return None
 
-    async def read_source_file(self, f: FileMetadata) -> dict[str, typing.Tuple[str, bytes]]:
+    async def read_source_file(
+        self, f: FileMetadata
+    ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
         if code := await self.the_storage_guy.load_file(f):
             return { 'source': (f.original_filename, code) }
+        
+        return None
 
     # TODO: adjust other reasons for exclusion
     # the reasons might depend on the language
