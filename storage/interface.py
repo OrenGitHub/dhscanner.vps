@@ -64,7 +64,11 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_callables(self, a: CallablesMetadata) -> typing.Optional[str]:
+    async def load_callables(self, a: CallablesMetadata) -> typing.Optional[dict]:
+        ...
+
+    @abc.abstractmethod
+    async def delete_callables(self, a: CallablesMetadata) -> None:
         ...
 
     @abc.abstractmethod
@@ -73,6 +77,10 @@ class Storage(abc.ABC):
 
     @abc.abstractmethod
     async def load_knowledge_base_facts(self, a: KbgenFactsMetadata) -> typing.Optional[str]:
+        ...
+
+    @abc.abstractmethod
+    async def delete_knowledge_base_facts(self, a: KbgenFactsMetadata) -> None:
         ...
 
     @abc.abstractmethod

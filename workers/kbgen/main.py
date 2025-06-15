@@ -32,6 +32,7 @@ class Kbgen(AbstractWorker):
         if callable := await self.read_callablle_file(c):
             if content := await self.kbgen(session, callable, c):
                 await self.the_storage_guy.save_knowledge_base_facts(content, c)
+                await self.the_storage_guy.delete_callables(c)
 
     async def kbgen(
         self,

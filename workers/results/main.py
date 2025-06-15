@@ -4,6 +4,9 @@ import dataclasses
 
 from results import generate_sarif
 
+def remove_tmp_prefix(filename: str) -> str:
+    return re.sub(r"^/tmp/tmp[^/]+/", "", filename)
+
 def patternify(suffix: str) -> str:
     start = r'startloc_(\d+)_(\d+)'
     end = r'endloc_(\d+)_(\d+)'

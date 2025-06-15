@@ -27,8 +27,9 @@ class RedisCoordinator(interface.Coordinator):
         if raw_bytes := self.get_status_bytes(job_id):
             if raw_str := self.get_status_string(raw_bytes):
                 if json_content := self.get_status_json(raw_str):
-                    if status := interface.Status.from_dict(json_content):
-                        return status
+                    if 'status' in json_content:
+                        value = json_content['status']
+                        return interface.Status.from_raw_string(value)
         return None
 
     @typing.override
@@ -45,7 +46,7 @@ class RedisCoordinator(interface.Coordinator):
         for key in keys:
             job_id = key.decode('utf-8')
             if job_status := self.get_status(job_id):
-                if job_status.is_the_same_as(desired_status):
+                if job_status == desired_status:
                     job_ids.append(job_id)
 
         return job_ids

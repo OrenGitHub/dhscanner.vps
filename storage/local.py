@@ -1,4 +1,5 @@
 import os
+import json
 import uuid
 import time
 import typing
@@ -8,8 +9,8 @@ import aiofiles
 
 from datetime import timedelta
 
-from . import db
-from . import models
+from storage import db
+from storage import models
 
 from storage import interface
 from common.language import Language
@@ -324,6 +325,74 @@ class LocalStorage(interface.Storage):
             )
         )
 
+    @typing.override
+    async def save_callables(self, content: dict, a: models.DhscannerAstMetadata) -> None:
+
+        num_callables = len(list(content.keys()))
+        for i in range(num_callables):
+            callable = f'{a.dhscanner_ast_unique_id}.callable.{i}'
+            async with aiofiles.open(callable, 'wt') as fl:
+                json.dump(content, fl)
+        
+        LocalStorage.store_callables_metadata_in_db(
+            models.CallablesMetadata(
+                a.dhscanner_ast_unique_id,
+                num_callables,
+                a.job_id,
+                a.original_filename,
+                a.language
+            )
+        )
+
+    @typing.override
+    async def load_callables(self, c: models.CallablesMetadata) -> typing.Optional[dict]:
+
+        callables = {}
+        for i in range(c.num_callables):
+            callable = f'{c.dhscanner_ast_unique_id}.callable.{i}'
+            async with aiofiles.open(callable, 'rt') as fl:
+                content = await fl.read()
+                callables[callable] = content
+
+        return callables
+
+    @typing.override
+    async def delete_callables(self, c: models.CallablesMetadata) -> None:
+        try:
+            start = time.monotonic()
+            for i in range(c.num_callables):
+                callable = f'{c.callable_unique_id}.callable.{i}'
+                await asyncio.to_thread(os.remove, callable)
+            end = time.monotonic()
+            delta = end - start
+            await self.logger.info(
+                LogMessage(
+                    file_unique_id=c.file_unique_id,
+                    job_id=c.job_id,
+                    context=Context.DELETE_CALLABLES_FILES_SUCCEEDED,
+                    original_filename=c.original_filename,
+                    language=c.language,
+                    duration=timedelta(seconds=delta)
+                )
+            )
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pass
+
+        end = time.monotonic()
+        delta = end - start
+        await self.logger.warning(
+            LogMessage(
+                file_unique_id=c.dhscanner_ast_unique_id,
+                job_id=c.job_id,
+                context=Context.DELETE_CALLABLES_FILES_FAILED,
+                original_filename=c.original_filename,
+                language=c.language,
+                duration=timedelta(seconds=delta)
+            )
+        )
+
     @staticmethod
     def mk_jobdir_if_needed(job_id: str) -> pathlib.Path:
         job_dir = BASEDIR / job_id
@@ -371,4 +440,10 @@ class LocalStorage(interface.Storage):
     def store_dhscanner_ast_metadata_in_db(a: models.DhscannerAstMetadata) -> None:
         with db.SessionLocal() as session:
             session.add(a)
+            session.commit()
+
+    @staticmethod
+    def store_callables_metadata_in_db(c: models.CallablesMetadata) -> None:
+        with db.SessionLocal() as session:
+            session.add(c)
             session.commit()

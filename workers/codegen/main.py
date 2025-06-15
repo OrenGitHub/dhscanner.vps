@@ -33,6 +33,7 @@ class Codegen(AbstractWorker):
         if dhscanner_ast := await self.read_dhscanner_ast_file(a):
             if content := await self.codegen(session, dhscanner_ast, a):
                 await self.the_storage_guy.save_callables(content, a)
+                await self.the_storage_guy.delete_dhscanner_ast(a)
 
     async def codegen(
         self,
@@ -44,9 +45,9 @@ class Codegen(AbstractWorker):
         try:
             async with session.post(TO_CODEGEN_URL, data=code) as response:
                 if response.status == 200:
+                    callables = await response.text()
                     end = time.monotonic()
                     delta = end - start
-                    dhscanner_ast = await response.text()
                     await self.the_logger_dude.info(
                         LogMessage(
                             file_unique_id=a.file_unique_id,
@@ -57,7 +58,7 @@ class Codegen(AbstractWorker):
                             duration=timedelta(seconds=delta)
                         )
                     )
-                    return json.loads(dhscanner_ast)['actualCallables']
+                    return json.loads(callables)
 
         except aiohttp.ClientError:
             pass

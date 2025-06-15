@@ -44,6 +44,7 @@ class DhscannerParser(AbstractWorker):
         if native_ast := await self.read_native_ast_file(a):
             if content := await self.parse(session, native_ast, a):
                 await self.the_storage_guy.save_dhscanner_ast(content, a)
+                await self.the_storage_guy.delete_native_ast(a)
 
     async def parse(
         self,
