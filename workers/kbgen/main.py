@@ -8,7 +8,7 @@ import dataclasses
 from datetime import timedelta
 
 from logger.models import Context, LogMessage
-from storage.models import CallablesMetadata, DhscannerAstMetadata
+from storage.models import CallablesMetadata
 from workers.interface import AbstractWorker
 
 TO_KBGEN_URL = 'http://kbgen:3000/kbgen'
@@ -28,9 +28,8 @@ class Kbgen(AbstractWorker):
         session: aiohttp.ClientSession,
         c: CallablesMetadata
     ) -> None:
-        
-        if callable := await self.read_callablle_file(c):
-            if content := await self.kbgen(session, callable, c):
+        if _callable := await self.read_callablle_file(c):
+            if content := await self.kbgen(session, _callable, c):
                 await self.the_storage_guy.save_knowledge_base_facts(content, c)
                 await self.the_storage_guy.delete_callables(c)
 
@@ -81,5 +80,5 @@ class Kbgen(AbstractWorker):
     ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
         if code := await self.the_storage_guy.load_file(c):
             return { 'source': (c.original_filename, code) }
-        
+
         return None

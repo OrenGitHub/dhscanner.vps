@@ -93,7 +93,7 @@ class NativeParser(AbstractWorker):
     ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
         if code := await self.the_storage_guy.load_file(f):
             return { 'source': (f.original_filename, code) }
-        
+
         return None
 
     # TODO: adjust other reasons for exclusion

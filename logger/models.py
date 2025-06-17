@@ -46,9 +46,11 @@ class Context(str, enum.Enum):
     QUERYENGINE = 'QUERYENGINE'
     RESULTS = 'RESULTS'
 
+# pylint: disable=too-few-public-methods
 class Base(DeclarativeBase):
     pass
 
+# pylint: disable=too-few-public-methods
 @dataclasses.dataclass(kw_only=True)
 class LogMessage(Base):
 

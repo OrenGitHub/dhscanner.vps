@@ -3,14 +3,13 @@ import time
 import typing
 import aiohttp
 import asyncio
-import requests
 import dataclasses
 
 from datetime import timedelta
 
+from workers.interface import AbstractWorker
 from logger.models import Context, LogMessage
 from storage.models import DhscannerAstMetadata
-from workers.interface import AbstractWorker
 
 TO_CODEGEN_URL = 'http://codegen:3000/codegen'
 
@@ -29,7 +28,7 @@ class Codegen(AbstractWorker):
         session: aiohttp.ClientSession,
         a: DhscannerAstMetadata
     ) -> None:
-        
+
         if dhscanner_ast := await self.read_dhscanner_ast_file(a):
             if content := await self.codegen(session, dhscanner_ast, a):
                 await self.the_storage_guy.save_callables(content, a)
@@ -82,5 +81,5 @@ class Codegen(AbstractWorker):
     ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
         if code := await self.the_storage_guy.load_dhscanner_ast(a):
             return { 'source': (a.original_filename, code) }
-        
+
         return None

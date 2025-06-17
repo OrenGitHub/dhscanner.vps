@@ -31,9 +31,8 @@ class Logger:
         for _ in range(MAX_RETRIES):
             if await Logger.send_attempt(message, level):
                 break
-            else:
-                await asyncio.sleep(reactive_delay)
-                reactive_delay *= 2
+            await asyncio.sleep(reactive_delay)
+            reactive_delay *= 2
 
     @staticmethod
     async def error(message: LogMessage):

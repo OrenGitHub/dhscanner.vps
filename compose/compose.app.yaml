@@ -1,16 +1,32 @@
+x-shared-transient-storage-path-anchor: &shared-transient-storage-path
+  SHARED_STORAGE: /app/transient_storage
+
+x-shared-transient-storage-anchor: &shared-transient-storage
+  - transient_storage:/app/transient_storage
+
 services:
 
   app:
     build:
-      context: .
+      context: app
       dockerfile: Dockerfile
       args:
         TZ: ${TZ:-Asia/Jerusalem}
-      environment:
-        NUM_APPROVED_URLS: ${NUM_APPROVED_URLS:-1}
-        APPROVED_URL_0: ${APPROVED_URL_0:?Not found}
-        APPROVED_BEARER_TOKEN_0: ${APPROVED_BEARER_TOKEN_0:?Not found}
+    environment:
+      NUM_APPROVED_URLS: ${NUM_APPROVED_URLS:-1}
+      APPROVED_URL_0: ${APPROVED_URL_0:?Not found}
+      APPROVED_BEARER_TOKEN_0: ${APPROVED_BEARER_TOKEN_0:?Not found}
+      <<: *shared-transient-storage-path
+    volumes:
+      *shared-transient-storage
     ports:
       - 8000:8000
     networks:
       - dhscanner
+
+volumes:
+  transient_storage:
+
+networks:
+  dhscanner:
+    external: true

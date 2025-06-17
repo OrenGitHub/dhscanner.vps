@@ -1,20 +1,66 @@
+x-shared-transient-storage-path-anchor: &shared-transient-storage-path
+  SHARED_STORAGE: /app/transient_storage
+
+x-shared-transient-storage-anchor: &shared-transient-storage
+  - transient_storage:/app/transient_storage
+
 services:
   native_parser:
     build:
       context: workers/native_parser
       dockerfile: ../../workers/Dockerfile
+    volumes:
+      *shared-transient-storage
+    environment:
+      <<: *shared-transient-storage-path
 
   dhscanner_parser:
     build:
       context: workers/dhscanner_parser
       dockerfile: ../../workers/Dockerfile
+    volumes:
+      *shared-transient-storage
+    environment:
+      <<: *shared-transient-storage-path
 
   codegen_worker:
     build:
       context: workers/codegen
       dockerfile: ../../workers/Dockerfile
+    volumes:
+      *shared-transient-storage
+    environment:
+      <<: *shared-transient-storage-path
 
   kbgen_worker:
     build:
       context: workers/kbgen
       dockerfile: ../../workers/Dockerfile
+    volumes:
+      *shared-transient-storage
+    environment:
+      <<: *shared-transient-storage-path
+
+  queryengine_worker:
+    build:
+      context: workers/queryengine
+      dockerfile: ../../workers/Dockerfile
+    volumes:
+      *shared-transient-storage
+    environment:
+      <<: *shared-transient-storage-path
+
+  results_worker:
+    build:
+      context: workers/results
+      dockerfile: ../../workers/Dockerfile
+    volumes:
+      *shared-transient-storage
+    environment:
+      <<: *shared-transient-storage-path
+
+volumes:
+  transient_storage:
+
+networks:
+  dhscanner:

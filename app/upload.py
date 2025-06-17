@@ -1,7 +1,6 @@
 import typing
 import fastapi
 
-from . import authentication
 from storage.interface import Storage
 
 async def get_actual_file_content(request: fastapi.Request) -> typing.AsyncIterator[bytes]:

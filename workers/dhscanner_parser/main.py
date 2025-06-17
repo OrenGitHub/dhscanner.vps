@@ -94,5 +94,5 @@ class DhscannerParser(AbstractWorker):
     ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
         if code := await self.the_storage_guy.load_native_ast(a):
             return { 'source': (a.original_filename, code) }
-        
+
         return None

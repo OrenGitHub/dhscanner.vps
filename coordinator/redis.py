@@ -13,7 +13,7 @@ class RedisCoordinator(interface.Coordinator):
 
     host: str = dataclasses.field(default=REDIS_HOST, init=False)
     port: int = dataclasses.field(default=REDIS_PORT, init=False)
- 
+
     redis_client: redis.Redis = dataclasses.field(init=False)
 
     def __post_init__(self):

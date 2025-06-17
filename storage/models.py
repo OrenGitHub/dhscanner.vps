@@ -6,9 +6,11 @@ from sqlalchemy.orm import mapped_column # type: ignore[attr-defined]
 
 from common.language import Language
 
+# pylint: disable=too-few-public-methods
 class Base(DeclarativeBase):
     pass
 
+# pylint: disable=too-few-public-methods
 class FileMetadata(Base):
 
     __tablename__ = 'files'
@@ -18,6 +20,7 @@ class FileMetadata(Base):
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
 
+# pylint: disable=too-few-public-methods
 class NativeAstMetadata(Base):
 
     __tablename__ = 'native_asts'
@@ -27,6 +30,7 @@ class NativeAstMetadata(Base):
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
 
+# pylint: disable=too-few-public-methods
 class DhscannerAstMetadata(Base):
 
     __tablename__ = 'dhscanner_asts'
@@ -36,6 +40,7 @@ class DhscannerAstMetadata(Base):
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
 
+# pylint: disable=too-few-public-methods
 class CallablesMetadata(Base):
 
     __tablename__ = 'callables'
@@ -46,6 +51,7 @@ class CallablesMetadata(Base):
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
 
+# pylint: disable=too-few-public-methods
 class KbgenFactsMetadata(Base):
 
     __tablename__ = 'knowledge_base_facts'

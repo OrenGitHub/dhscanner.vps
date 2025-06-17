@@ -149,7 +149,7 @@ class LocalStorage(interface.Storage):
         native_ast = f'{f.stored_filename}.native.ast'
         async with aiofiles.open(native_ast, 'wt') as fl:
             await fl.write(content)
-        
+
         LocalStorage.store_native_ast_metadata_in_db(
             models.NativeAstMetadata(
                 native_ast,
@@ -235,18 +235,19 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def save_dhscanner_ast(self, content: str, f: models.NativeAstMetadata) -> None:
+    async def save_dhscanner_ast(self, content: str, a: models.NativeAstMetadata) -> None:
 
-        native_ast = f'{f.stored_filename}.native.ast'
-        async with aiofiles.open(native_ast, 'wt') as fl:
+        unique_file_id = a.native_ast_unique_id.removesuffix('native.ast')
+        dhscanner_ast = f'{unique_file_id}.dhscanner.ast'
+        async with aiofiles.open(dhscanner_ast, 'wt') as fl:
             await fl.write(content)
-        
-        LocalStorage.store_native_ast_metadata_in_db(
-            models.NativeAstMetadata(
-                native_ast,
-                f.job_id,
-                f.original_filename,
-                f.language
+
+        LocalStorage.store_dhscanner_ast_metadata_in_db(
+            models.DhscannerAstMetadata(
+                dhscanner_ast,
+                a.job_id,
+                a.original_filename,
+                a.language
             )
         )
 
@@ -330,10 +331,11 @@ class LocalStorage(interface.Storage):
 
         num_callables = len(list(content.keys()))
         for i in range(num_callables):
-            callable = f'{a.dhscanner_ast_unique_id}.callable.{i}'
-            async with aiofiles.open(callable, 'wt') as fl:
+            unique_file_id = a.dhscanner_ast_unique_id.removesuffix('.dhscanner.ast')
+            _callable = f'{unique_file_id}.callable.{i}'
+            async with aiofiles.open(_callable, 'wt') as fl:
                 json.dump(content, fl)
-        
+
         LocalStorage.store_callables_metadata_in_db(
             models.CallablesMetadata(
                 a.dhscanner_ast_unique_id,
@@ -361,8 +363,8 @@ class LocalStorage(interface.Storage):
         try:
             start = time.monotonic()
             for i in range(c.num_callables):
-                callable = f'{c.callable_unique_id}.callable.{i}'
-                await asyncio.to_thread(os.remove, callable)
+                _callable = f'{c.callable_unique_id}.callable.{i}'
+                await asyncio.to_thread(os.remove, _callable)
             end = time.monotonic()
             delta = end - start
             await self.logger.info(
@@ -407,7 +409,7 @@ class LocalStorage(interface.Storage):
     def get_language_from(filename: str) -> typing.Optional[Language]:
         if language := Language.from_raw_str(pathlib.Path(filename).suffix):
             return language
-        
+
         return None
 
     @staticmethod
