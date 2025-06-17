@@ -1,4 +1,4 @@
-fastapi
-uvicorn[standard]
-sqlalchemy 
-requests
+redis
+aiohttp
+aiofiles
+sqlalchemy

@@ -1,5 +1,5 @@
-from native_parser import main
 from logger.client import Logger
+from workers.native_parser import main
 from coordinator.interface import Status
 from storage.current import get_current_storage_method
 from coordinator.current import get_current_coordinator_between_workers
