@@ -21,6 +21,7 @@ from logger.models import (
 
 BASEDIR: typing.Final[pathlib.Path] = pathlib.Path('/tmp/dhscanner_jobs')
 
+# pylint: disable=too-many-public-methods
 class LocalStorage(interface.Storage):
 
     @typing.override
@@ -351,10 +352,10 @@ class LocalStorage(interface.Storage):
 
         callables = {}
         for i in range(c.num_callables):
-            callable = f'{c.dhscanner_ast_unique_id}.callable.{i}'
-            async with aiofiles.open(callable, 'rt') as fl:
+            _callable = f'{c.dhscanner_ast_unique_id}.callable.{i}'
+            async with aiofiles.open(_callable, 'rt') as fl:
                 content = await fl.read()
-                callables[callable] = content
+                callables[_callable] = content
 
         return callables
 

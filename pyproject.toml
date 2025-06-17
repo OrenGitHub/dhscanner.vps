@@ -5,6 +5,7 @@ disable = [
     "import-error",
     "line-too-long",
     "missing-timeout",
+    "ungrouped-imports",
     "wrong-import-order",
     "missing-class-docstring",
     "missing-module-docstring",

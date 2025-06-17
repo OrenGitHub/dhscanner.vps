@@ -5,6 +5,9 @@ import fastapi
 import slowapi
 import logging
 
+from logger.client import Logger
+from storage.current import get_current_storage_method
+
 from . import upload
 from . import status
 from . import analyze
@@ -66,11 +69,11 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
 
 # every client must have an approved url to access
 # (one url per client, which is also rate limited)
-def define_endpoints(coordinator: Coordinator) -> None:
+def define_endpoints(storage: Storage, coordinator: Coordinator) -> None:
     num_approved_urls = os.getenv('NUM_APPROVED_URLS', '1')
     approved_urls = [os.getenv(f'APPROVED_URL_{i}', 'scan') for i in range(int(num_approved_urls))]
     for approved_url in approved_urls:
-        create_handlers(approved_url, coordinator)
+        create_handlers(approved_url, coordinator, storage)
 
 def configure_logger() -> None:
     logging.basicConfig(
@@ -91,7 +94,8 @@ def content_type_check(content_type: str = fastapi.Header(..., alias='Content-Ty
     return True
 
 def init(coordinator: Coordinator) -> None:
-    configure_logger()
-    define_endpoints(coordinator)
+    logger = Logger()
+    storage = get_current_storage_method(logger)
+    define_endpoints(storage, coordinator)
 
 init(RedisCoordinator())

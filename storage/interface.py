@@ -64,11 +64,11 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_callables(self, a: CallablesMetadata) -> typing.Optional[dict]:
+    async def load_callables(self, c: CallablesMetadata) -> typing.Optional[dict]:
         ...
 
     @abc.abstractmethod
-    async def delete_callables(self, a: CallablesMetadata) -> None:
+    async def delete_callables(self, c: CallablesMetadata) -> None:
         ...
 
     @abc.abstractmethod
