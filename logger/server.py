@@ -1,8 +1,8 @@
-import contextlib
 import fastapi
+import contextlib
 
-from . import db
-from . import models
+from logger import db
+from logger import models
 
 app = fastapi.FastAPI()
 

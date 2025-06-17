@@ -1,5 +1,5 @@
-import dataclasses
 import enum
+import dataclasses
 
 from datetime import timedelta
 

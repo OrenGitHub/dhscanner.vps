@@ -2,49 +2,49 @@ services:
 
   frontjs:
     build:
-      context: dhscanner/dhscanner.0.fronts/js
+      context: ../dhscanner/dhscanner.0.fronts/js
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontts:
     build:
-      context: dhscanner/dhscanner.0.fronts/ts
+      context: ../dhscanner/dhscanner.0.fronts/ts
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontgo:
     build:
-      context: dhscanner/dhscanner.0.fronts/go
+      context: ../dhscanner/dhscanner.0.fronts/go
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontphp:
     build:
-      context: dhscanner/dhscanner.0.fronts/php
+      context: ../dhscanner/dhscanner.0.fronts/php
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontpy:
     build:
-      context: dhscanner/dhscanner.0.fronts/py
+      context: ../dhscanner/dhscanner.0.fronts/py
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontcs:
     build:
-      context: dhscanner/dhscanner.0.fronts/cs
+      context: ../dhscanner/dhscanner.0.fronts/cs
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontrb:
     build:
-      context: dhscanner.0.fronts/rb
+      context: ../dhscanner/dhscanner.0.fronts/rb
       dockerfile: Dockerfile
     networks:
       - dhscanner

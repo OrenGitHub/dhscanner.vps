@@ -7,8 +7,10 @@ x-shared-transient-storage-anchor: &shared-transient-storage
 services:
   native_parser:
     build:
-      context: workers/native_parser
-      dockerfile: ../../workers/Dockerfile
+      context: ../workers
+      dockerfile: Dockerfile
+      args:
+        WORKER: native_parser
     volumes:
       *shared-transient-storage
     environment:
@@ -16,8 +18,10 @@ services:
 
   dhscanner_parser:
     build:
-      context: workers/dhscanner_parser
-      dockerfile: ../../workers/Dockerfile
+      context: ../workers
+      dockerfile: Dockerfile
+      args:
+        WORKER: dhscanner_parser
     volumes:
       *shared-transient-storage
     environment:
@@ -25,8 +29,10 @@ services:
 
   codegen_worker:
     build:
-      context: workers/codegen
-      dockerfile: ../../workers/Dockerfile
+      context: ../workers
+      dockerfile: Dockerfile
+      args:
+        WORKER: codegen
     volumes:
       *shared-transient-storage
     environment:
@@ -34,8 +40,10 @@ services:
 
   kbgen_worker:
     build:
-      context: workers/kbgen
-      dockerfile: ../../workers/Dockerfile
+      context: ../workers
+      dockerfile: Dockerfile
+      args:
+        WORKER: codegen
     volumes:
       *shared-transient-storage
     environment:
@@ -43,8 +51,10 @@ services:
 
   queryengine_worker:
     build:
-      context: workers/queryengine
-      dockerfile: ../../workers/Dockerfile
+      context: ../workers
+      dockerfile: Dockerfile
+      args:
+        WORKER: queryengine
     volumes:
       *shared-transient-storage
     environment:
@@ -52,8 +62,10 @@ services:
 
   results_worker:
     build:
-      context: workers/results
-      dockerfile: ../../workers/Dockerfile
+      context: ../workers
+      dockerfile: Dockerfile
+      args:
+        WORKER: queryengine
     volumes:
       *shared-transient-storage
     environment:
