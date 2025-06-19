@@ -328,19 +328,18 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def save_callables(self, content: dict, a: models.DhscannerAstMetadata) -> None:
+    async def save_callables(self, content: list, a: models.DhscannerAstMetadata) -> None:
 
-        num_callables = len(list(content.keys()))
-        for i in range(num_callables):
+        for _callable, i in enumerate(content):
             unique_file_id = a.dhscanner_ast_unique_id.removesuffix('.dhscanner.ast')
-            _callable = f'{unique_file_id}.callable.{i}'
-            async with aiofiles.open(_callable, 'wt') as fl:
-                json.dump(content, fl)
+            callable_name = f'{unique_file_id}.callable.{i}'
+            async with aiofiles.open(callable_name, 'wt') as fl:
+                json.dump(_callable, fl)
 
         LocalStorage.store_callables_metadata_in_db(
             models.CallablesMetadata(
                 a.dhscanner_ast_unique_id,
-                num_callables,
+                len(content),
                 a.job_id,
                 a.original_filename,
                 a.language
@@ -355,7 +354,7 @@ class LocalStorage(interface.Storage):
             _callable = f'{c.dhscanner_ast_unique_id}.callable.{i}'
             async with aiofiles.open(_callable, 'rt') as fl:
                 content = await fl.read()
-                callables[_callable] = content
+                callables[_callable] = json.loads(content)
 
         return callables
 
@@ -392,6 +391,66 @@ class LocalStorage(interface.Storage):
                 context=Context.DELETE_CALLABLES_FILES_FAILED,
                 original_filename=c.original_filename,
                 language=c.language,
+                duration=timedelta(seconds=delta)
+            )
+        )
+
+    @typing.override
+    async def save_knowledge_base_facts(self, content: list[str], c: models.CallablesMetadata, i: int) -> None:
+
+        facts_filename = f'{c.callable_unique_id}.facts.callable.{i}'
+        async with aiofiles.open(facts_filename, 'wt') as fl:
+            fl.write('\n'.join(content))
+
+        LocalStorage.store_kbgen_facts_metadata_in_db(
+            models.KbgenFactsMetadata(
+                c.callable_unique_id,
+                c.num_callables,
+                c.job_id,
+                c.original_filename,
+                c.language
+            )
+        )
+
+    @typing.override
+    async def load_knowledge_base_facts(self, k: models.KbgenFactsMetadata, i: int) -> list[str]:
+        facts_filename = f'{k.knowledge_base_facts_unique_id}.facts.callable.{i}'
+        async with aiofiles.open(facts_filename, 'rt') as fl:
+            return await fl.readlines()
+
+    @typing.override
+    async def delete_knowledge_base_facts(self, k: models.KbgenFactsMetadata) -> None:
+        try:
+            start = time.monotonic()
+            for i in range(k.num_callables):
+                facts = f'{k.knowledge_base_facts_unique_id}.facts.callable.{i}'
+                await asyncio.to_thread(os.remove, facts)
+            end = time.monotonic()
+            delta = end - start
+            await self.logger.info(
+                LogMessage(
+                    file_unique_id=k.knowledge_base_facts_unique_id,
+                    job_id=k.job_id,
+                    context=Context.DELETE_KBGEN_FACTS_FILES_SUCCEEDED,
+                    original_filename=k.original_filename,
+                    language=k.language,
+                    duration=timedelta(seconds=delta)
+                )
+            )
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pass
+
+        end = time.monotonic()
+        delta = end - start
+        await self.logger.warning(
+            LogMessage(
+                file_unique_id=k.knowledge_base_facts_unique_id,
+                job_id=k.job_id,
+                context=Context.DELETE_KBGEN_FACTS_FILES_FAILED,
+                original_filename=k.original_filename,
+                language=k.language,
                 duration=timedelta(seconds=delta)
             )
         )

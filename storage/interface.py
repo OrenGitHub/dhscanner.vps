@@ -11,6 +11,7 @@ from storage.models import (
     FileMetadata,
     KbgenFactsMetadata,
     NativeAstMetadata,
+    ResultsMetadata,
 )
 
 @dataclasses.dataclass(frozen=True)
@@ -60,7 +61,7 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def save_callables(self, content: dict, a: DhscannerAstMetadata) -> None:
+    async def save_callables(self, content: list, a: DhscannerAstMetadata) -> None:
         ...
 
     @abc.abstractmethod
@@ -72,11 +73,11 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def save_knowledge_base_facts(self, content: list[str], c: CallablesMetadata) -> None:
+    async def save_knowledge_base_facts(self, content: list[str], c: CallablesMetadata, i: int) -> None:
         ...
 
     @abc.abstractmethod
-    async def load_knowledge_base_facts(self, a: KbgenFactsMetadata) -> typing.Optional[str]:
+    async def load_knowledge_base_facts(self, k: KbgenFactsMetadata, i: int) -> list[str]:
         ...
 
     @abc.abstractmethod
@@ -84,11 +85,15 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def save_results(
-        self,
-        content: typing.AsyncIterator[bytes],
-        job_id: str
-    ) -> None:
+    async def save_results(self, content: dict, job_id: str) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def load_results(self, r: ResultsMetadata) -> dict:
+        ...
+
+    @abc.abstractmethod
+    async def delete_results(self, r: ResultsMetadata) -> None:
         ...
 
     @staticmethod

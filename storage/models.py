@@ -61,3 +61,11 @@ class KbgenFactsMetadata(Base):
     job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
+
+# pylint: disable=too-few-public-methods
+class ResultsMetadata(Base):
+
+    __tablename__ = 'results'
+
+    results_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
