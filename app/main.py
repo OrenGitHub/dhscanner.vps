@@ -1,4 +1,5 @@
 import os
+import secrets
 import sys
 import typing
 import fastapi
@@ -40,7 +41,15 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
 
     limiter = slowapi.Limiter(key_func=lambda request: request.client.host)
 
-    @app.post(f'api/{approved_url}/upload')
+    @app.post(f'/api/{approved_url}/getjobid')
+    @limiter.limit('100/minute')
+    async def _(
+        request: fastapi.Request,
+        _=fastapi.Depends(authentication.check)
+    ):
+        return {'job_id': secrets.token_hex(16)}
+
+    @app.post(f'/api/{approved_url}/upload')
     @limiter.limit('1000/second')
     async def _(
         request: fastapi.Request,
@@ -51,7 +60,7 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
     ):
         return await upload.run(request, storage, job_id, filename)
 
-    @app.post(f'api/{approved_url}/analyze')
+    @app.post(f'/api/{approved_url}/analyze')
     @limiter.limit('100/minute')
     async def _(
         request: fastapi.Request,
@@ -60,7 +69,7 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
     ):
         return await analyze.run(coordinator, job_id)
 
-    @app.post(f'api/{approved_url}/status')
+    @app.post(f'/api/{approved_url}/status')
     @limiter.limit('100/minute')
     async def _(
         request: fastapi.Request,
