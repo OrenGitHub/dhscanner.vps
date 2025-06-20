@@ -8,8 +8,8 @@ services:
 
   app:
     build:
-      context: ../app
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: app/Dockerfile
       args:
         TZ: ${TZ:-Asia/Jerusalem}
     environment:

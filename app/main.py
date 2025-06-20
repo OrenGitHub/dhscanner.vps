@@ -54,6 +54,7 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
     @app.post(f'api/{approved_url}/analyze')
     @limiter.limit('100/minute')
     async def _(
+        request: fastapi.Request,
         job_id: str = fastapi.Query(..., description=API_ANALYZE_JOB_ID_DESCRIPTION),
         _=fastapi.Depends(authentication.check)
     ):
@@ -62,6 +63,7 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
     @app.post(f'api/{approved_url}/status')
     @limiter.limit('100/minute')
     async def _(
+        request: fastapi.Request,
         job_id: str = fastapi.Query(..., description=API_STATUS_JOB_ID_DESCRIPTION),
         _=fastapi.Depends(authentication.check)
     ):

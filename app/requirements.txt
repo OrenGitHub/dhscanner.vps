@@ -1,5 +1,8 @@
+redis
 fastapi
+slowapi
+aiohttp
+aiofiles
 uvicorn[standard]
 sqlalchemy 
-python-magic
 requests
