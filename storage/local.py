@@ -400,7 +400,7 @@ class LocalStorage(interface.Storage):
 
         facts_filename = f'{c.callable_unique_id}.facts.callable.{i}'
         async with aiofiles.open(facts_filename, 'wt') as fl:
-            fl.write('\n'.join(content))
+            await fl.write('\n'.join(content))
 
         LocalStorage.store_kbgen_facts_metadata_in_db(
             models.KbgenFactsMetadata(
@@ -455,9 +455,66 @@ class LocalStorage(interface.Storage):
             )
         )
 
+    @typing.override
+    async def save_results(self, content: dict, job_id: str) -> None:
+        results_filename = f'{str(LocalStorage.jobdir(job_id))}.results.json'
+        async with aiofiles.open(results_filename, 'wt') as fl:
+            json.dump(content, fl)
+
+        LocalStorage.store_results_metadata_in_db(
+            models.ResultsMetadata(
+                results_filename,
+                job_id,
+            )
+        )
+
+    @typing.override
+    async def load_results(self, r: models.ResultsMetadata) -> dict:
+        async with aiofiles.open(r.results_unique_id, 'rt') as fl:
+            return await json.load(fl)
+
+    @typing.override
+    async def delete_results(self, r: models.ResultsMetadata) -> None:
+        try:
+            start = time.monotonic()
+            await asyncio.to_thread(os.remove, r.results_unique_id)
+            end = time.monotonic()
+            delta = end - start
+            await self.logger.info(
+                LogMessage(
+                    file_unique_id=r.file_unique_id,
+                    job_id=r.job_id,
+                    context=Context.DELETE_RESULTS_SUCCEEDED,
+                    original_filename=r.original_filename,
+                    language=r.language,
+                    duration=timedelta(seconds=delta)
+                )
+            )
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pass
+
+        end = time.monotonic()
+        delta = end - start
+        await self.logger.warning(
+            LogMessage(
+                file_unique_id=r.dhscanner_ast_unique_id,
+                job_id=r.job_id,
+                context=Context.DELETE_RESULTS_FAILED,
+                original_filename=r.original_filename,
+                language=r.language,
+                duration=timedelta(seconds=delta)
+            )
+        )
+
+    @staticmethod
+    def jobdir(job_id: str) -> pathlib.Path:
+        return BASEDIR / job_id
+
     @staticmethod
     def mk_jobdir_if_needed(job_id: str) -> pathlib.Path:
-        job_dir = BASEDIR / job_id
+        job_dir = LocalStorage.jobdir(job_id)
         job_dir.mkdir(parents=True, exist_ok=True)
         return job_dir
 

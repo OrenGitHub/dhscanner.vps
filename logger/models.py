@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import enum
 import dataclasses
 
 from datetime import timedelta
+import typing
 
 import sqlalchemy
 
@@ -19,6 +22,7 @@ class Level(str, enum.Enum):
 
 class Context(str, enum.Enum):
     UPLOAD_FILE = 'UPLOAD_FILE'
+    COORDINATOR_NOT_RESPONDING = 'COORDINATOR_NOT_RESPONDING'
     READ_SOURCE_FILE_FAILED = 'READ_SOURCE_FILE_FAILED'
     READ_SOURCE_FILE_SUCCEEDED = 'READ_SOURCE_FILE_SUCCEEDED'
     DELETE_SOURCE_FILE_FAILED = 'DELETE_SOURCE_FILE_FAILED'
@@ -46,6 +50,10 @@ class Context(str, enum.Enum):
     KBGEN_SUCCEEDED = 'KBGEN_SUCCEEDED'
     KBGEN_FAILED = 'KBGEN_FAILED'
     QUERYENGINE = 'QUERYENGINE'
+    READ_RESULTS_FAILED = 'READ_RESULTS_FAILED'
+    READ_RESULTS_SUCCEEDED = 'READ_RESULTS_SUCCEEDED'
+    DELETE_RESULTS_FAILED = 'DELETE_RESULTS_FAILED'
+    DELETE_RESULTS_SUCCEEDED = 'DELETE_RESULTS_SUCCEEDED'
     RESULTS = 'RESULTS'
 
 # pylint: disable=too-few-public-methods
@@ -63,4 +71,30 @@ class LogMessage(Base):
     context: Mapped[Context] = mapped_column(sqlalchemy.Enum(Context), nullable=False)
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
-    duration: Mapped[timedelta] = mapped_column(sqlalchemy .Interval, nullable=False)
+    duration: Mapped[timedelta] = mapped_column(sqlalchemy.Interval, nullable=False)
+
+    def tojson(self) -> dict:
+        return {
+            'file_unique_id': self.file_unique_id,
+            'job_id': self.job_id,
+            'context': self.context.value,
+            'original_filename': self.original_filename,
+            'language': self.language.value,
+            'duration': self.duration.total_seconds()
+        }
+
+    @classmethod
+    def fromjson(cls, content: dict) -> typing.Optional[LogMessage]:
+        try:
+            return cls(
+                file_unique_id=content['file_unique_id'],
+                job_id=content['job_id'],
+                context=Context(content['context']),
+                original_filename=content['original_filename'],
+                language=Language(content['language']),
+                duration=timedelta(seconds=content['duration'])
+            )
+        except KeyError: # missing field(s)
+            return None
+        except ValueError: # Enum(s) conversion failed
+            return None

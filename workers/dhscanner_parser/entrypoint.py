@@ -9,7 +9,7 @@ if __name__ == '__main__':
     worker = main.DhscannerParser(
         logger,
         get_current_storage_method(logger),
-        get_current_coordinator_between_workers(),
+        get_current_coordinator_between_workers(logger),
         Status.WaitingForDhscannerParsing
     )
     worker.check_in()

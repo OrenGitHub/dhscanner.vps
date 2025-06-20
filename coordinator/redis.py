@@ -3,7 +3,11 @@ import redis
 import typing
 import dataclasses
 
-from . import interface
+from datetime import timedelta
+
+from coordinator import interface
+from common.language import Language
+from logger.models import Context, LogMessage
 
 REDIS_HOST: typing.Final[str] = 'redis'
 REDIS_PORT: typing.Final[int] = 6379
@@ -17,10 +21,10 @@ class RedisCoordinator(interface.Coordinator):
     redis_client: redis.Redis = dataclasses.field(init=False)
 
     def __post_init__(self):
-        self.redis_client = redis.Redis(
+        object.__setattr__(self, 'redis_client', redis.Redis(
             host=self.host,
             port=self.port
-        )
+        ))
 
     @typing.override
     def get_status(self, job_id: str) -> typing.Optional[interface.Status]:
@@ -40,8 +44,23 @@ class RedisCoordinator(interface.Coordinator):
         self.redis_client.set(job_id, status_bytes)
 
     @typing.override
-    def get_jobs_waiting_for(self, desired_status: interface.Status) -> list[str]:
-        keys = self.redis_client.keys('*')
+    async def get_jobs_waiting_for(self, desired_status: interface.Status) -> list[str]:
+
+        try:
+            keys = self.redis_client.keys('*')
+        except redis.exceptions.RedisError:
+            await self.logger.warning(
+                LogMessage(
+                    file_unique_id='*', 
+                    job_id='*',
+                    context=Context.COORDINATOR_NOT_RESPONDING,
+                    original_filename='*',
+                    language=Language.UNKNOWN,
+                    duration=timedelta(0)
+                )
+            )
+            return []
+
         job_ids = []
         for key in keys:
             job_id = key.decode('utf-8')
@@ -52,8 +71,20 @@ class RedisCoordinator(interface.Coordinator):
         return job_ids
 
     @typing.override
-    def mark_jobs_finished(self, job_ids: list[str]) -> None:
-        self.redis_client.delete(*job_ids)
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        try:
+            self.redis_client.delete(*job_ids)
+        except redis.exceptions.RedisError:
+            await self.logger.warning(
+                LogMessage(
+                    file_unique_id='*', 
+                    job_id='*',
+                    context=Context.COORDINATOR_NOT_RESPONDING,
+                    original_filename='*',
+                    language=Language.UNKNOWN,
+                    duration=timedelta(0)
+                )
+            )
 
     def get_status_bytes(self, job_id: str) -> typing.Optional[bytes]:
         return self.redis_client.get(job_id)

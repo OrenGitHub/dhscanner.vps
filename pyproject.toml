@@ -13,4 +13,5 @@ disable = [
 ]
 
 [tool.mypy]
+exclude = "^dhscanner/"
 ignore_missing_imports = true

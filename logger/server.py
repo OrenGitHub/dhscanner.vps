@@ -4,16 +4,22 @@ import contextlib
 from logger import db
 from logger import models
 
-app = fastapi.FastAPI()
-
 @contextlib.asynccontextmanager
 async def lifespan(_: fastapi.FastAPI):
-    async with db.engine.begin() as connection:
-        await connection.run_sync(models.Base.metadata.create_all)
+    models.Base.metadata.create_all(bind=db.engine)
     yield
 
+app = fastapi.FastAPI(lifespan=lifespan)
+
 @app.post("/log")
-def log(msg: models.LogMessage) -> fastapi.Response:
+def log(serialized_msg: dict) -> fastapi.Response:
+    msg = models.LogMessage.fromjson(serialized_msg)
+    if msg is None:
+        return fastapi.responses.JSONResponse(
+            status_code=422,
+            content={'detail': 'invalid LogMessage received'}
+        )
+
     with db.SessionLocal() as session:
         session.add(msg)
         session.commit()

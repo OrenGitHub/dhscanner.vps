@@ -8,10 +8,10 @@ import logging
 from logger.client import Logger
 from storage.current import get_current_storage_method
 
-from . import upload
-from . import status
-from . import analyze
-from . import authentication
+from app import upload
+from app import status
+from app import analyze
+from app import authentication
 
 from storage.interface import Storage
 from coordinator.interface import Coordinator
@@ -98,4 +98,4 @@ def init(coordinator: Coordinator) -> None:
     storage = get_current_storage_method(logger)
     define_endpoints(storage, coordinator)
 
-init(RedisCoordinator())
+init(RedisCoordinator(Logger()))

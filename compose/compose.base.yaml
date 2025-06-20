@@ -13,8 +13,8 @@ services:
 
   logger_server:
     build:
-      context: ../logger/
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: logger/Dockerfile
     networks:
       - dhscanner
 

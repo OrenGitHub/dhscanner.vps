@@ -9,7 +9,7 @@ if __name__ == '__main__':
     worker = main.Queryengine(
         logger,
         get_current_storage_method(logger),
-        get_current_coordinator_between_workers(),
+        get_current_coordinator_between_workers(logger),
         Status.WaitingForQueryengine
     )
     worker.check_in()

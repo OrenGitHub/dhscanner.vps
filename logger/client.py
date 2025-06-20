@@ -17,7 +17,7 @@ class Logger:
     @staticmethod
     async def send_attempt(message: LogMessage, level: Level):
         url = f'{LOGGER_URL}/{level.value}'
-        data = dataclasses.asdict(message)
+        data = message.tojson()
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=data) as response:

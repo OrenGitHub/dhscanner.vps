@@ -5,6 +5,8 @@ import enum
 import typing
 import dataclasses
 
+from logger.client import Logger
+
 class Status(str, enum.Enum):
 
     WaitingForNativeParsing = 'WaitingForNativeParsing'
@@ -24,6 +26,8 @@ class Status(str, enum.Enum):
 @dataclasses.dataclass(frozen=True)
 class Coordinator(abc.ABC):
 
+    logger: Logger
+
     @abc.abstractmethod
     def get_status(self, job_id: str) -> typing.Optional[Status]:
         ...
@@ -33,9 +37,9 @@ class Coordinator(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def get_jobs_waiting_for(self, desired_status: Status) -> list[str]:
+    async def get_jobs_waiting_for(self, desired_status: Status) -> list[str]:
         ...
 
     @abc.abstractmethod
-    def mark_jobs_finished(self, job_ids: list[str]) -> None:
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
         ...
