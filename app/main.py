@@ -18,7 +18,11 @@ from storage.interface import Storage
 from coordinator.interface import Coordinator
 from coordinator.redis import RedisCoordinator
 
-app = fastapi.FastAPI()
+app = fastapi.FastAPI(
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
+)
 
 API_UPLOAD_JOB_ID_DESCRIPTION: typing.Final[str] = """
 every uploaded file belongs to a job(id)
