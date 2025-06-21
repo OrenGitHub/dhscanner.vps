@@ -4,19 +4,18 @@ import http
 import typing
 import aiohttp
 import asyncio
-import dataclasses
 
 from logger.models import Level, LogMessage
 
 MAX_RETRIES: typing.Final[int] = 3
 RETRY_DELAY: typing.Final[float] = 0.5
-LOGGER_URL:typing.Final[str] = 'http://logger:8000/log'
+LOGGER_URL:typing.Final[str] = 'http://logger_server:8000/log'
 
 class Logger:
 
     @staticmethod
     async def send_attempt(message: LogMessage, level: Level):
-        url = f'{LOGGER_URL}/{level.value}'
+        url = LOGGER_URL
         data = message.tojson()
         try:
             async with aiohttp.ClientSession() as session:

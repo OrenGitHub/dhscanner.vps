@@ -41,11 +41,16 @@ launch multi-step static code analysis
 """
 
 # pylint: disable=cell-var-from-loop,redefined-outer-name
-def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storage):
+def create_handlers(
+    approved_url: str,
+    coordinator: Coordinator,
+    storage: Storage,
+    logger: Logger
+):
 
     limiter = slowapi.Limiter(key_func=lambda request: request.client.host)
 
-    @app.post(f'/api/{approved_url}/getjobid')
+    @app.get(f'/api/{approved_url}/getjobid')
     @limiter.limit('100/minute')
     async def _(
         request: fastapi.Request,
@@ -58,11 +63,11 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
     async def _(
         request: fastapi.Request,
         job_id: str = fastapi.Query(..., description=API_UPLOAD_JOB_ID_DESCRIPTION),
-        filename: str = fastapi.Header(..., alias="X-Path", description=API_UPLOAD_FILENAME_DESCRIPTION),
+        filename: str = fastapi.Header(..., alias='X-Path', description=API_UPLOAD_FILENAME_DESCRIPTION),
         _1=fastapi.Depends(authentication.check),
         _2=fastapi.Depends(content_type_check),
     ):
-        return await upload.run(request, storage, job_id, filename)
+        return await upload.run(request, storage, job_id, filename, logger)
 
     @app.post(f'/api/{approved_url}/analyze')
     @limiter.limit('100/minute')
@@ -84,11 +89,11 @@ def create_handlers(approved_url: str, coordinator: Coordinator, storage: Storag
 
 # every client must have an approved url to access
 # (one url per client, which is also rate limited)
-def define_endpoints(storage: Storage, coordinator: Coordinator) -> None:
+def define_endpoints(storage: Storage, coordinator: Coordinator, logger: Logger) -> None:
     num_approved_urls = os.getenv('NUM_APPROVED_URLS', '1')
     approved_urls = [os.getenv(f'APPROVED_URL_{i}', 'scan') for i in range(int(num_approved_urls))]
     for approved_url in approved_urls:
-        create_handlers(approved_url, coordinator, storage)
+        create_handlers(approved_url, coordinator, storage, logger)
 
 def configure_logger() -> None:
     logging.basicConfig(
@@ -111,6 +116,6 @@ def content_type_check(content_type: str = fastapi.Header(..., alias='Content-Ty
 def init(coordinator: Coordinator) -> None:
     logger = Logger()
     storage = get_current_storage_method(logger)
-    define_endpoints(storage, coordinator)
+    define_endpoints(storage, coordinator, logger)
 
 init(RedisCoordinator(Logger()))

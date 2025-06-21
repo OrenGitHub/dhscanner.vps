@@ -13,6 +13,9 @@ app = fastapi.FastAPI(lifespan=lifespan)
 
 @app.post("/log")
 def log(serialized_msg: dict) -> fastapi.Response:
+
+    print(f'DODO 666666666 {serialized_msg}', flush=True)
+
     msg = models.LogMessage.fromjson(serialized_msg)
     if msg is None:
         return fastapi.responses.JSONResponse(
