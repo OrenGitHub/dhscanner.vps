@@ -67,7 +67,6 @@ def create_handlers(
         return {'job_id': secrets.token_hex(16)}
 
     @app.post(f'/api/{approved_url}/upload')
-    @limiter.limit('1000/second')
     async def _(
         request: fastapi.Request,
         job_id: str = fastapi.Query(..., description=API_UPLOAD_JOB_ID_DESCRIPTION),

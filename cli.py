@@ -76,10 +76,6 @@ class Argparse:
     @staticmethod
     def run() -> typing.Optional[Argparse]:
 
-        logging.info('')
-        logging.info('checking required args 👀')
-        logging.info('')
-
         parser = argparse.ArgumentParser(
             description=ARGPARSE_PROG_DESC
         )
@@ -102,7 +98,7 @@ class Argparse:
 
         args = parser.parse_args()
 
-        logging.info('everything is fine 😊')
+        logging.info('[ step 0 ] required args ok 😊')
 
         return Argparse(
             scan_dirname=args.scan_dirname,
@@ -238,14 +234,15 @@ def main(args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
     job_id = create_job_id(APPROVED_URL, BEARER_TOKEN)
     if job_id is None: return
-    logging.info(f'[ step 0 ] created job id {job_id}')
+    logging.info(f'[ step 1 ] created job id {job_id}')
 
     files = collect_relevant_files(args.scan_dirname)
     if len(files) == 0: return
-    logging.info(f'[ step 1 ] collected {len(files)} files')
+    logging.info(f'[ step 2 ] collected {len(files)} files')
 
     status = asyncio.run(upload(files, job_id, APPROVED_URL, BEARER_TOKEN))
     if status is False: return
+    logging.info(f'[ step 3 ] uploaded {len(files)} files')
 
 if __name__ == "__main__":
     if args := Argparse.run():
