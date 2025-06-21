@@ -19,22 +19,21 @@ async def run(
     logger: Logger
 ) -> dict:
 
+    language = Language.from_filename(filename)
+    if language is None:
+        language = Language.UNKNOWN
+
     await logger.info(
         LogMessage(
-            file_unique_id=filename,
+            file_unique_id='not_allocated_yet',
             job_id=job_id,
-            context=Context.UPLOAD_FILE,
+            context=Context.UPLOADED_FILE_RECEIVED,
             original_filename=filename,
-            language=Language.UNKNOWN,
+            language=language,
             duration=timedelta(0)
         )
     )
 
-    print('MOMOMOMO 777779', flush=True)
-
     content = await get_actual_file_content(request)
     await storage.save_file(content, filename, job_id)
-    return upload_succeeded(filename)
-
-def upload_succeeded(filename: str) -> dict:
     return {'status': 'ok', 'original_upload_filename': filename}

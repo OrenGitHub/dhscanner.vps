@@ -1,11 +1,13 @@
 import os
-import secrets
 import sys
 import typing
 import fastapi
 import slowapi
 import logging
+import secrets
+import contextlib
 
+from storage import db, models
 from logger.client import Logger
 from storage.current import get_current_storage_method
 
@@ -18,10 +20,16 @@ from storage.interface import Storage
 from coordinator.interface import Coordinator
 from coordinator.redis import RedisCoordinator
 
+@contextlib.asynccontextmanager
+async def lifespan(app: fastapi.FastAPI):
+    models.Base.metadata.create_all(bind=db.engine)
+    yield
+
 app = fastapi.FastAPI(
     docs_url=None,
     redoc_url=None,
-    openapi_url=None
+    openapi_url=None,
+    lifespan=lifespan
 )
 
 API_UPLOAD_JOB_ID_DESCRIPTION: typing.Final[str] = """

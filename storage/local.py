@@ -33,15 +33,15 @@ class LocalStorage(interface.Storage):
     ) -> None:
         start = time.monotonic()
         job_dir = LocalStorage.mk_jobdir_if_needed(job_id)
-        if language := LocalStorage.get_language_from(original_filename_in_repo):
+        if language := Language.from_filename(original_filename_in_repo):
             stored_filename = LocalStorage.mk_stored_filename(job_dir, language)
             await LocalStorage.save_on_disk(content, stored_filename)
             LocalStorage.store_file_metadata_in_db(
                 models.FileMetadata(
-                    str(stored_filename),
-                    job_id,
-                    original_filename_in_repo,
-                    language
+                    file_unique_id=str(stored_filename),
+                    job_id=job_id,
+                    original_filename=original_filename_in_repo,
+                    language=language
                 )
             )
             end = time.monotonic()
@@ -50,7 +50,7 @@ class LocalStorage(interface.Storage):
                 LogMessage(
                     file_unique_id=str(stored_filename),
                     job_id=job_id,
-                    context=Context.UPLOAD_FILE,
+                    context=Context.UPLOADED_FILE_SAVED,
                     original_filename=original_filename_in_repo,
                     language=language,
                     duration=timedelta(seconds=delta)
@@ -62,10 +62,10 @@ class LocalStorage(interface.Storage):
             LogMessage(
                 file_unique_id=LocalStorage.get_unique_id(),
                 job_id=job_id,
-                context=Context.UPLOAD_FILE,
+                context=Context.UPLOADED_FILE_SAVED,
                 original_filename=original_filename_in_repo,
                 language=Language.UNKNOWN,
-                duration=timedelta(0)
+                duration=timedelta(seconds=600)
             )
         )
 
@@ -521,13 +521,6 @@ class LocalStorage(interface.Storage):
     @staticmethod
     def get_unique_id() -> str:
         return str(uuid.uuid4())
-
-    @staticmethod
-    def get_language_from(filename: str) -> typing.Optional[Language]:
-        if language := Language.from_raw_str(pathlib.Path(filename).suffix):
-            return language
-
-        return None
 
     @staticmethod
     def mk_stored_filename(job_dir: pathlib.Path, language: Language) -> pathlib.Path:
