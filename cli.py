@@ -187,15 +187,13 @@ async def upload_single_file(
     session: aiohttp.ClientSession,
     job_id: str,
     f: pathlib.Path,
-    index: int,
-    n: int,
     APPROVED_URL: str,
     BEARER_TOKEN: str
 ) -> bool:
 
     params = {'job_id': job_id}
     url = upload_url(APPROVED_URL)
-    headers = upload_headers(BEARER_TOKEN, f.name)
+    headers = upload_headers(BEARER_TOKEN, str(f.resolve()))
     return await actual_upload(session, url, headers, params, f)
 
 def create_upload_tasks(
@@ -210,12 +208,10 @@ def create_upload_tasks(
             session,
             job_id,
             f,
-            i,
-            len(files),
             APPROVED_URL,
             BEARER_TOKEN,
         )
-        for i, f in enumerate(files)
+        for f in files
     ]
 
 async def upload(
