@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import math
 import os
 import sys
 import http
 import json
+import time
 import typing
 import pathlib
 import asyncio
@@ -37,6 +39,10 @@ PORT: typing.Final[int] = 8000
 SUFFIXES: typing.Final[set[str]] = {
     'py', 'ts', 'js', 'php', 'rb', 'java', 'cs', 'go'   
 }
+
+UPLOAD_BATCH_SIZE = 100
+MAX_NUM_CHECKS = 100
+NUM_SECONDS_BETEEN_STEP_CHECK = 5
 
 logging.basicConfig(
     level=logging.INFO,
@@ -147,6 +153,15 @@ def upload_headers(BEARER_TOKEN: str, filename: str) -> dict:
         'Content-Type': 'application/octet-stream'
     }
 
+def just_authroization_header(BEARER_TOKEN: str) -> dict:
+    return {'Authorization': f'Bearer {BEARER_TOKEN}'}
+
+def analyze_headers(BEARER_TOKEN: str) -> dict:
+    return just_authroization_header(BEARER_TOKEN)
+
+def status_headers(BEARER_TOKEN: str) -> dict:
+    return just_authroization_header(BEARER_TOKEN)
+
 async def check_response(response: aiohttp.ClientResponse, filename: str) -> bool:
 
     status = response.status
@@ -217,18 +232,48 @@ async def upload(
     BEARER_TOKEN: str
 ) -> bool:
 
-    async with aiohttp.ClientSession() as session:
-        results = await asyncio.gather(
-            *create_upload_tasks(
-                session,
-                job_id,
-                files,
-                APPROVED_URL,
-                BEARER_TOKEN
+    n = len(files)
+    percent = '%'
+    batches = math.ceil(n / UPLOAD_BATCH_SIZE)
+    percentage_for_1_batch = math.floor(100 / batches)
+    for i in range(batches):
+        start = i * UPLOAD_BATCH_SIZE
+        end = (i + 1) * UPLOAD_BATCH_SIZE
+        async with aiohttp.ClientSession() as session:
+            results = await asyncio.gather(
+                *create_upload_tasks(
+                    session,
+                    job_id,
+                    files[start:end],
+                    APPROVED_URL,
+                    BEARER_TOKEN
+                )
             )
-        )
+        overall_percentage = min(100, (i + 1) * percentage_for_1_batch)
+        logging.info(f'[ step 3 ] uploaded {overall_percentage}{percent}')
 
     return all(results)
+
+def analyze_url(APPROVED_URL) -> str:
+    return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/analyze'
+
+def analyze(job_id: str) -> bool:
+    params = {'job_id': job_id}
+    url = analyze_url(APPROVED_URL)
+    headers = analyze_headers(BEARER_TOKEN)
+    with requests.post(url, params=params, headers=headers) as response:
+        return response.status_code == http.HTTPStatus.OK
+
+def status_url(APPROVED_URL) -> str:
+    return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/status'
+
+def check(job_id: str) -> str:
+    params = {'job_id': job_id}
+    url = status_url(APPROVED_URL)
+    headers = status_headers(BEARER_TOKEN)
+    with requests.post(url, params=params, headers=headers) as response:
+        if response.status_code == http.HTTPStatus.OK:
+            return 'MOMO'
 
 def main(args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
@@ -240,9 +285,16 @@ def main(args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
     if len(files) == 0: return
     logging.info(f'[ step 2 ] collected {len(files)} files')
 
+    logging.info(f'[ step 3 ] uploaded started')
     status = asyncio.run(upload(files, job_id, APPROVED_URL, BEARER_TOKEN))
     if status is False: return
-    logging.info(f'[ step 3 ] uploaded {len(files)} files')
+    logging.info(f'[ step 3 ] uploaded finished')
+
+    if analyze(job_id):
+        for _ in range(MAX_NUM_CHECKS):
+            step = check(job_id)
+            logging.info(f'[ step {step} ] finished')
+            time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
 
 if __name__ == "__main__":
     if args := Argparse.run():

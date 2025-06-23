@@ -9,7 +9,7 @@ from coordinator import interface
 from common.language import Language
 from logger.models import Context, LogMessage
 
-REDIS_HOST: typing.Final[str] = 'redis'
+REDIS_HOST: typing.Final[str] = 'mq'
 REDIS_PORT: typing.Final[int] = 6379
 
 @dataclasses.dataclass(frozen=True)

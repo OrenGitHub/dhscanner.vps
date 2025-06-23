@@ -58,14 +58,16 @@ class LocalStorage(interface.Storage):
             )
             return
 
+        end = time.monotonic()
+        delta = end - start
         await self.logger.info(
             LogMessage(
                 file_unique_id=LocalStorage.get_unique_id(),
                 job_id=job_id,
-                context=Context.UPLOADED_FILE_SAVED,
+                context=Context.UPLOADED_FILE_SKIPPED_UNKNOWN_LANGUAGE,
                 original_filename=original_filename_in_repo,
                 language=Language.UNKNOWN,
-                duration=timedelta(seconds=600)
+                duration=timedelta(seconds=delta)
             )
         )
 

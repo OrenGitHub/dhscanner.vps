@@ -20,16 +20,10 @@ from storage.interface import Storage
 from coordinator.interface import Coordinator
 from coordinator.redis import RedisCoordinator
 
-@contextlib.asynccontextmanager
-async def lifespan(app: fastapi.FastAPI):
-    models.Base.metadata.create_all(bind=db.engine)
-    yield
-
 app = fastapi.FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
-    lifespan=lifespan
 )
 
 API_UPLOAD_JOB_ID_DESCRIPTION: typing.Final[str] = """
