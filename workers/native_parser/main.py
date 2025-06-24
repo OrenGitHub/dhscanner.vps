@@ -54,7 +54,14 @@ class NativeParser(AbstractWorker):
         start = time.monotonic()
         url = AST_BUILDER_URL[f.language]
         try:
-            async with session.post(url, data=code) as response:
+            form = aiohttp.FormData()
+            form.add_field(
+                'source',
+                code['source'][1],
+                filename=code['source'][0],
+                content_type='application/octet-stream'
+            )
+            async with session.post(url, data=form) as response:
                 if response.status == 200:
                     native_ast = await response.text()
                     end = time.monotonic()
