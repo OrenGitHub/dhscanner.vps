@@ -22,6 +22,16 @@ class FileMetadata(Base):
 
 # pylint: disable=too-few-public-methods
 class NativeAstMetadata(Base):
+    '''
+    Initialize with keywords
+
+    ---
+
+    - `native_ast_unique_id`: `str`
+    - `job_id`: `str`
+    - `original_filename`: `str`
+    - `language`: `Language`
+    '''
 
     __tablename__ = 'native_asts'
 

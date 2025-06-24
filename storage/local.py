@@ -151,16 +151,16 @@ class LocalStorage(interface.Storage):
     @typing.override
     async def save_native_ast(self, content: str, f: models.FileMetadata) -> None:
 
-        native_ast = f'{f.stored_filename}.native.ast'
+        native_ast = f'{f.file_unique_id}.native.ast'
         async with aiofiles.open(native_ast, 'wt') as fl:
             await fl.write(content)
 
         LocalStorage.store_native_ast_metadata_in_db(
             models.NativeAstMetadata(
-                native_ast,
-                f.job_id,
-                f.original_filename,
-                f.language
+                native_ast_unique_id=native_ast,
+                job_id=f.job_id,
+                original_filename=f.original_filename,
+                language=f.language
             )
         )
 
