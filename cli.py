@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import math
 import os
 import sys
 import http
+import math
 import json
 import time
 import typing
@@ -40,6 +40,7 @@ SUFFIXES: typing.Final[set[str]] = {
     'py', 'ts', 'js', 'php', 'rb', 'java', 'cs', 'go'   
 }
 
+MAX_ATTEMPTS_CONNECTING_TO_SERVER = 10
 UPLOAD_BATCH_SIZE = 100
 MAX_NUM_CHECKS = 100
 NUM_SECONDS_BETEEN_STEP_CHECK = 5
@@ -277,9 +278,15 @@ def check(job_id: str) -> str:
 
 def main(args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
-    job_id = create_job_id(APPROVED_URL, BEARER_TOKEN)
-    if job_id is None: return
-    logging.info(f'[ step 1 ] created job id {job_id}')
+    for _ in range(MAX_ATTEMPTS_CONNECTING_TO_SERVER):
+        try:
+            job_id = create_job_id(APPROVED_URL, BEARER_TOKEN)
+            if job_id is None: return
+            logging.info(f'[ step 1 ] created job id {job_id}')
+            break
+        except requests.exceptions.ConnectionError:
+            time.sleep(1)
+            pass
 
     files = collect_relevant_files(args.scan_dirname)
     if len(files) == 0: return

@@ -130,6 +130,7 @@ class LocalStorage(interface.Storage):
                     duration=timedelta(seconds=delta)
                 )
             )
+            return
         except FileNotFoundError:
             pass
         except PermissionError:
@@ -221,6 +222,7 @@ class LocalStorage(interface.Storage):
                     duration=timedelta(seconds=delta)
                 )
             )
+            return
         except FileNotFoundError:
             pass
         except PermissionError:

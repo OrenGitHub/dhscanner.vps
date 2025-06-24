@@ -68,7 +68,8 @@ class LogMessage(Base):
 
     __tablename__ = 'logs'
 
-    file_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    msg: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True, autoincrement=True)
+    file_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     context: Mapped[Context] = mapped_column(sqlalchemy.Enum(Context), nullable=False)
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
