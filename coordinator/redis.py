@@ -70,22 +70,6 @@ class RedisCoordinator(interface.Coordinator):
 
         return job_ids
 
-    @typing.override
-    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
-        try:
-            self.redis_client.delete(*job_ids)
-        except redis.exceptions.RedisError:
-            await self.logger.warning(
-                LogMessage(
-                    file_unique_id='*', 
-                    job_id='*',
-                    context=Context.COORDINATOR_NOT_RESPONDING,
-                    original_filename='*',
-                    language=Language.UNKNOWN,
-                    duration=timedelta(0)
-                )
-            )
-
     def get_status_bytes(self, job_id: str) -> typing.Optional[bytes]:
         return self.redis_client.get(job_id)
 

@@ -174,7 +174,7 @@ class LocalStorage(interface.Storage):
                 delta = end - start
                 await self.logger.warning(
                     LogMessage(
-                        file_unique_id=a.file_unique_id,
+                        file_unique_id=a.native_ast_unique_id,
                         job_id=a.job_id,
                         context=Context.READ_NATIVE_AST_FILE_SUCCEEDED,
                         original_filename=a.original_filename,
@@ -208,7 +208,7 @@ class LocalStorage(interface.Storage):
     async def delete_native_ast(self, a: models.NativeAstMetadata) -> None:
         try:
             start = time.monotonic()
-            await asyncio.to_thread(os.remove, a.file_unique_id)
+            await asyncio.to_thread(os.remove, a.native_ast_unique_id)
             end = time.monotonic()
             delta = end - start
             await self.logger.info(
@@ -242,17 +242,17 @@ class LocalStorage(interface.Storage):
     @typing.override
     async def save_dhscanner_ast(self, content: str, a: models.NativeAstMetadata) -> None:
 
-        unique_file_id = a.native_ast_unique_id.removesuffix('native.ast')
+        unique_file_id = a.native_ast_unique_id.removesuffix('.native.ast')
         dhscanner_ast = f'{unique_file_id}.dhscanner.ast'
         async with aiofiles.open(dhscanner_ast, 'wt') as fl:
             await fl.write(content)
 
         LocalStorage.store_dhscanner_ast_metadata_in_db(
             models.DhscannerAstMetadata(
-                dhscanner_ast,
-                a.job_id,
-                a.original_filename,
-                a.language
+                dhscanner_ast_unique_id=dhscanner_ast,
+                job_id=a.job_id,
+                original_filename=a.original_filename,
+                language=a.language
             )
         )
 

@@ -1,3 +1,4 @@
+import http
 import time
 import typing
 import asyncio
@@ -7,6 +8,7 @@ import dataclasses
 from datetime import timedelta
 
 from common.language import Language
+from coordinator.interface import Status
 from storage.models import FileMetadata
 from logger.models import Context, LogMessage
 from workers.interface import AbstractWorker
@@ -33,6 +35,14 @@ class NativeParser(AbstractWorker):
             scan = NativeParser.scan_worthy
             tasks = [self.run_single_file(session, f) for f in files if scan(f)]
             await asyncio.gather(*tasks)
+
+    @typing.override
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            self.the_coordinator.set_status(
+                job_id,
+                Status.WaitingForDhscannerParsing
+            )
 
     async def run_single_file(
         self,
@@ -62,7 +72,7 @@ class NativeParser(AbstractWorker):
                 content_type='application/octet-stream'
             )
             async with session.post(url, data=form) as response:
-                if response.status == 200:
+                if response.status == http.HTTPStatus.OK:
                     native_ast = await response.text()
                     end = time.monotonic()
                     delta = end - start

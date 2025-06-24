@@ -1,3 +1,4 @@
+import http
 import time
 import typing
 import aiohttp
@@ -6,6 +7,7 @@ import dataclasses
 
 from datetime import timedelta
 
+from coordinator.interface import Status
 from logger.models import (
     Context,
     LogMessage
@@ -36,6 +38,14 @@ class DhscannerParser(AbstractWorker):
             tasks = [self.run_single_ast(session, f) for f in asts]
             await asyncio.gather(*tasks)
 
+    @typing.override
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            self.the_coordinator.set_status(
+                job_id,
+                Status.WaitingForCodegen
+            )
+
     async def run_single_ast(
         self,
         session: aiohttp.ClientSession,
@@ -56,21 +66,18 @@ class DhscannerParser(AbstractWorker):
         start = time.monotonic()
         url = DHSCANNER_AST_BUILDER_URL[a.language]
         try:
-            form = aiohttp.FormData()
-            form.add_field(
-                'source',
-                code['source'][1],
-                filename=code['source'][0],
-                content_type='application/octet-stream'
-            )
-            async with session.post(url, data=code) as response:
-                if response.status == 200:
+            payload = {
+                'filename': code['source'][0],
+                'content': code['source'][1].decode('utf-8')
+            }
+            async with session.post(url, json=payload) as response:
+                if response.status == http.HTTPStatus.OK:
                     dhscanner_ast = await response.text()
                     end = time.monotonic()
                     delta = end - start
                     await self.the_logger_dude.info(
                         LogMessage(
-                            file_unique_id=a.file_unique_id,
+                            file_unique_id=a.native_ast_unique_id,
                             job_id=a.job_id,
                             context=Context.DHSCANNER_PARSING_SUCCEEDED,
                             original_filename=a.original_filename,
@@ -87,7 +94,7 @@ class DhscannerParser(AbstractWorker):
         delta = end - start
         await self.the_logger_dude.info(
             LogMessage(
-                file_unique_id=a.file_unique_id,
+                file_unique_id=a.native_ast_unique_id,
                 job_id=a.job_id,
                 context=Context.DHSCANNER_PARSER_FAILED,
                 original_filename=a.original_filename,

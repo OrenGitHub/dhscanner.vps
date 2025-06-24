@@ -42,6 +42,16 @@ class NativeAstMetadata(Base):
 
 # pylint: disable=too-few-public-methods
 class DhscannerAstMetadata(Base):
+    '''
+    Initialize with keywords
+
+    ---
+
+    - `dhscanner_ast_unique_id`: `str`
+    - `job_id`: `str`
+    - `original_filename`: `str`
+    - `language`: `Language`
+    '''
 
     __tablename__ = 'dhscanner_asts'
 

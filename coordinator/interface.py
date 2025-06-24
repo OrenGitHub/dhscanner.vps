@@ -39,7 +39,3 @@ class Coordinator(abc.ABC):
     @abc.abstractmethod
     async def get_jobs_waiting_for(self, desired_status: Status) -> list[str]:
         ...
-
-    @abc.abstractmethod
-    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
-        ...

@@ -28,6 +28,8 @@ services:
       *shared-transient-storage
     environment:
       <<: *shared-transient-storage-path
+    networks:
+      - dhscanner
 
   codegen_worker:
     build:

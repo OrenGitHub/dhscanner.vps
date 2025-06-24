@@ -29,7 +29,7 @@ class AbstractWorker(abc.ABC):
         while True:
             job_ids = await self.the_coordinator.get_jobs_waiting_for(self.status)
             await self.worker_loop_internal(job_ids)
-            await self.the_coordinator.mark_jobs_finished(job_ids)
+            await self.mark_jobs_finished(job_ids)
             await asyncio.sleep(1)
 
     @typing.final
@@ -39,4 +39,8 @@ class AbstractWorker(abc.ABC):
 
     @abc.abstractmethod
     async def run(self, job_id: str) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
         ...
