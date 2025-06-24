@@ -19,7 +19,9 @@ from logger.models import (
     LogMessage
 )
 
-BASEDIR: typing.Final[pathlib.Path] = pathlib.Path('/tmp/dhscanner_jobs')
+BASEDIR: typing.Final[pathlib.Path] = pathlib.Path(
+    '/app/transient_storage/dhscanner_jobs'
+)
 
 # pylint: disable=too-many-public-methods
 class LocalStorage(interface.Storage):

@@ -5,9 +5,7 @@ import fastapi
 import slowapi
 import logging
 import secrets
-import contextlib
 
-from storage import db, models
 from logger.client import Logger
 from storage.current import get_current_storage_method
 
