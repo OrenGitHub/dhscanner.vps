@@ -41,6 +41,7 @@ class DhscannerParser(AbstractWorker):
         session: aiohttp.ClientSession,
         a: NativeAstMetadata
     ) -> None:
+
         if native_ast := await self.read_native_ast_file(a):
             if content := await self.parse(session, native_ast, a):
                 await self.the_storage_guy.save_dhscanner_ast(content, a)
@@ -55,11 +56,18 @@ class DhscannerParser(AbstractWorker):
         start = time.monotonic()
         url = DHSCANNER_AST_BUILDER_URL[a.language]
         try:
+            form = aiohttp.FormData()
+            form.add_field(
+                'source',
+                code['source'][1],
+                filename=code['source'][0],
+                content_type='application/octet-stream'
+            )
             async with session.post(url, data=code) as response:
                 if response.status == 200:
+                    dhscanner_ast = await response.text()
                     end = time.monotonic()
                     delta = end - start
-                    dhscanner_ast = await response.text()
                     await self.the_logger_dude.info(
                         LogMessage(
                             file_unique_id=a.file_unique_id,

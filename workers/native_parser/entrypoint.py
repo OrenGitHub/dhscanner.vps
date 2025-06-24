@@ -13,5 +13,4 @@ if __name__ == '__main__':
             coordinator,
             Status.WaitingForNativeParsing
         )
-        print(f'native parser checking in', flush=True)
         worker.check_in()

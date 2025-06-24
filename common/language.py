@@ -30,6 +30,14 @@ class Language(str, enum.Enum):
         suffixes = pathlib.Path(filename).suffixes
         extension = "".join(suffixes)
         if extension.startswith('.'):
-            return Language.from_raw_str(extension.lstrip('.'))
+            candidate = Language.from_raw_str(extension.lstrip('.'))
+            if candidate is not None:
+                return candidate
+
+        suffix = pathlib.Path(filename).suffix
+        if suffix.startswith('.'):
+            candidate = Language.from_raw_str(suffix.lstrip('.'))
+            if candidate is not None:
+                return candidate
 
         return None
