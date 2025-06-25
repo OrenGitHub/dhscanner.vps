@@ -125,6 +125,9 @@ def relevant(filename: pathlib.Path) -> bool:
     if '.test.' in name:
         return False
 
+    if name.endswith('.d.ts'):
+        return False
+
     return True
 
 def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
