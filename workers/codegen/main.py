@@ -44,7 +44,7 @@ class Codegen(AbstractWorker):
                 if 'actualCallables' in content:
                     callables = content['actualCallables']
                     await self.the_storage_guy.save_callables(callables, a)
-                    await self.the_storage_guy.delete_dhscanner_ast(a)
+            await self.the_storage_guy.delete_dhscanner_ast(a)
 
     async def codegen(
         self,
