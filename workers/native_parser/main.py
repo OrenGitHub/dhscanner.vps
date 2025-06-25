@@ -52,7 +52,9 @@ class NativeParser(AbstractWorker):
         if code := await self.read_source_file(f):
             if content := await self.parse(session, code, f):
                 await self.the_storage_guy.save_native_ast(content, f)
-                await self.the_storage_guy.delete_file(f)
+
+            # either way - delete the source file ...
+            await self.the_storage_guy.delete_file(f)
 
     async def parse(
         self,
@@ -73,18 +75,26 @@ class NativeParser(AbstractWorker):
             async with session.post(url, data=form) as response:
                 if response.status == http.HTTPStatus.OK:
                     native_ast = await response.text()
+                    context = Context.NATIVE_PARSING_SUCCEEDED
+                    received_native_ast_is_empty = (len(native_ast) == 0)
+                    if received_native_ast_is_empty:
+                        context = Context.NATIVE_PARSING_EMPTY_AST
                     end = time.monotonic()
                     delta = end - start
                     await self.the_logger_dude.info(
                         LogMessage(
                             file_unique_id=f.file_unique_id,
                             job_id=f.job_id,
-                            context=Context.NATIVE_PARSING_SUCCEEDED,
+                            context=context,
                             original_filename=f.original_filename,
                             language=f.language,
                             duration=timedelta(seconds=delta)
                         )
                     )
+
+                    if received_native_ast_is_empty:
+                        return None
+
                     return native_ast
 
         except aiohttp.ClientError:
