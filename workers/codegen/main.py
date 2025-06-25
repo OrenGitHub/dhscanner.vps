@@ -1,3 +1,4 @@
+import http
 import json
 import time
 import typing
@@ -7,6 +8,7 @@ import dataclasses
 
 from datetime import timedelta
 
+from coordinator.interface import Status
 from workers.interface import AbstractWorker
 from logger.models import Context, LogMessage
 from storage.models import DhscannerAstMetadata
@@ -22,6 +24,14 @@ class Codegen(AbstractWorker):
         async with aiohttp.ClientSession() as s:
             tasks = [self.codegen_single_dhscanner_ast(s, d) for d in dhscanner_asts]
             await asyncio.gather(*tasks)
+
+    @typing.override
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            self.the_coordinator.set_status(
+                job_id,
+                Status.WaitingForKbgen
+            )
 
     async def codegen_single_dhscanner_ast(
         self,
@@ -39,19 +49,19 @@ class Codegen(AbstractWorker):
     async def codegen(
         self,
         session: aiohttp.ClientSession,
-        code: dict[str, typing.Tuple[str, bytes]],
+        dhscanner_ast: dict,
         a: DhscannerAstMetadata
     ) -> typing.Optional[dict]:
         start = time.monotonic()
         try:
-            async with session.post(TO_CODEGEN_URL, data=code) as response:
-                if response.status == 200:
+            async with session.post(TO_CODEGEN_URL, json=dhscanner_ast) as response:
+                if response.status == http.HTTPStatus.OK:
                     callables = await response.text()
                     end = time.monotonic()
                     delta = end - start
                     await self.the_logger_dude.info(
                         LogMessage(
-                            file_unique_id=a.file_unique_id,
+                            file_unique_id=a.dhscanner_ast_unique_id,
                             job_id=a.job_id,
                             context=Context.CODEGEN_SUCCEEDED,
                             original_filename=a.original_filename,
@@ -68,7 +78,7 @@ class Codegen(AbstractWorker):
         delta = end - start
         await self.the_logger_dude.info(
             LogMessage(
-                file_unique_id=a.file_unique_id,
+                file_unique_id=a.dhscanner_ast_unique_id,
                 job_id=a.job_id,
                 context=Context.CODEGEN_FAILED,
                 original_filename=a.original_filename,
@@ -78,10 +88,11 @@ class Codegen(AbstractWorker):
         )
         return None
 
-    async def read_dhscanner_ast_file(
-        self, a: DhscannerAstMetadata
-    ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
-        if code := await self.the_storage_guy.load_dhscanner_ast(a):
-            return { 'source': (a.original_filename, code) }
+    async def read_dhscanner_ast_file(self, a: DhscannerAstMetadata) -> typing.Optional[dict]:
+        if content := await self.the_storage_guy.load_dhscanner_ast(a):
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                pass
 
         return None

@@ -41,6 +41,8 @@ services:
       *shared-transient-storage
     environment:
       <<: *shared-transient-storage-path
+    networks:
+      - dhscanner
 
   kbgen_worker:
     build:
@@ -52,6 +54,8 @@ services:
       *shared-transient-storage
     environment:
       <<: *shared-transient-storage-path
+    networks:
+      - dhscanner
 
   queryengine_worker:
     build:
@@ -63,6 +67,8 @@ services:
       *shared-transient-storage
     environment:
       <<: *shared-transient-storage-path
+    networks:
+      - dhscanner
 
   results_worker:
     build:

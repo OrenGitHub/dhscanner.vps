@@ -62,6 +62,17 @@ class DhscannerAstMetadata(Base):
 
 # pylint: disable=too-few-public-methods
 class CallablesMetadata(Base):
+    '''
+    Initialize with keywords
+
+    ---
+
+    - `callable_unique_id`: `str`
+    - `num_callables`: `int`
+    - `job_id`: `str`
+    - `original_filename`: `str`
+    - `language`: `Language`
+    '''
 
     __tablename__ = 'callables'
 

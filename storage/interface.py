@@ -53,7 +53,7 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_dhscanner_ast(self, a: DhscannerAstMetadata) -> typing.Optional[bytes]:
+    async def load_dhscanner_ast(self, a: DhscannerAstMetadata) -> typing.Optional[str]:
         ...
 
     @abc.abstractmethod

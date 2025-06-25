@@ -259,18 +259,18 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def load_dhscanner_ast(self, a: models.DhscannerAstMetadata) -> typing.Optional[bytes]:
+    async def load_dhscanner_ast(self, a: models.DhscannerAstMetadata) -> typing.Optional[str]:
         try:
             start = time.monotonic()
-            async with aiofiles.open(a.native_ast_unique_id, 'rb') as fl:
+            async with aiofiles.open(a.dhscanner_ast_unique_id, 'rt', encoding='utf-8') as fl:
                 content = await fl.read()
                 end = time.monotonic()
                 delta = end - start
                 await self.logger.warning(
                     LogMessage(
-                        file_unique_id=a.file_unique_id,
+                        file_unique_id=a.dhscanner_ast_unique_id,
                         job_id=a.job_id,
-                        context=Context.READ_NATIVE_AST_FILE_SUCCEEDED,
+                        context=Context.READ_DHSCANNER_AST_FILE_SUCCEEDED,
                         original_filename=a.original_filename,
                         language=a.language,
                         duration=timedelta(seconds=delta)
@@ -287,9 +287,9 @@ class LocalStorage(interface.Storage):
         delta = end - start
         await self.logger.warning(
             LogMessage(
-                file_unique_id=a.file_unique_id,
+                file_unique_id=a.dhscanner_ast_unique_id,
                 job_id=a.job_id,
-                context=Context.READ_NATIVE_AST_FILE_FAILED,
+                context=Context.READ_DHSCANNER_AST_FILE_FAILED,
                 original_filename=a.original_filename,
                 language=a.language,
                 duration=timedelta(seconds=delta)
@@ -302,12 +302,12 @@ class LocalStorage(interface.Storage):
     async def delete_dhscanner_ast(self, a: models.DhscannerAstMetadata) -> None:
         try:
             start = time.monotonic()
-            await asyncio.to_thread(os.remove, a.file_unique_id)
+            await asyncio.to_thread(os.remove, a.dhscanner_ast_unique_id)
             end = time.monotonic()
             delta = end - start
             await self.logger.info(
                 LogMessage(
-                    file_unique_id=a.file_unique_id,
+                    file_unique_id=a.dhscanner_ast_unique_id,
                     job_id=a.job_id,
                     context=Context.DELETE_DHSCANNER_AST_FILE_SUCCEEDED,
                     original_filename=a.original_filename,
@@ -315,6 +315,7 @@ class LocalStorage(interface.Storage):
                     duration=timedelta(seconds=delta)
                 )
             )
+            return
         except FileNotFoundError:
             pass
         except PermissionError:
@@ -336,7 +337,7 @@ class LocalStorage(interface.Storage):
     @typing.override
     async def save_callables(self, content: list, a: models.DhscannerAstMetadata) -> None:
 
-        for _callable, i in enumerate(content):
+        for i, _callable in enumerate(content):
             unique_file_id = a.dhscanner_ast_unique_id.removesuffix('.dhscanner.ast')
             callable_name = f'{unique_file_id}.callable.{i}'
             async with aiofiles.open(callable_name, 'wt') as fl:
@@ -344,11 +345,11 @@ class LocalStorage(interface.Storage):
 
         LocalStorage.store_callables_metadata_in_db(
             models.CallablesMetadata(
-                a.dhscanner_ast_unique_id,
-                len(content),
-                a.job_id,
-                a.original_filename,
-                a.language
+                callable_unique_id=a.dhscanner_ast_unique_id,
+                num_callables=len(content),
+                job_id=a.job_id,
+                original_filename=a.original_filename,
+                language=a.language
             )
         )
 
