@@ -113,7 +113,19 @@ class Argparse:
         )
 
 def relevant(filename: pathlib.Path) -> bool:
-    return filename.suffix.lstrip('.') in SUFFIXES
+    if filename.suffix.lstrip('.') not in SUFFIXES:
+        return False
+
+    resolved = filename.resolve()
+    parts = resolved.parts
+    name = str(resolved)
+    if 'test' in parts:
+        return False
+
+    if '.test.' in name:
+        return False
+
+    return True
 
 def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
 

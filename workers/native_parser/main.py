@@ -32,8 +32,7 @@ class NativeParser(AbstractWorker):
     async def run(self, job_id: str) -> None:
         files = self.the_storage_guy.load_files_metadata_from_db(job_id)
         async with aiohttp.ClientSession() as session:
-            scan = NativeParser.scan_worthy
-            tasks = [self.run_single_file(session, f) for f in files if scan(f)]
+            tasks = [self.run_single_file(session, f) for f in files]
             await asyncio.gather(*tasks)
 
     @typing.override
@@ -112,19 +111,3 @@ class NativeParser(AbstractWorker):
             return { 'source': (f.original_filename, code) }
 
         return None
-
-    # TODO: adjust other reasons for exclusion
-    # the reasons might depend on the language
-    # (like the third party directory name: node_module for javascript,
-    # site-packages for python or vendor/bundle for ruby etc.)
-    # pylint: disable=unused-argument
-    @staticmethod
-    def scan_worthy(f: FileMetadata) -> bool:
-
-        if '/test/' in f.original_filename:
-            return False
-
-        if '.test.' in f.original_filename:
-            return False
-
-        return True
