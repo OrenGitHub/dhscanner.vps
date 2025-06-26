@@ -336,13 +336,14 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def save_callables(self, content: list, a: models.DhscannerAstMetadata) -> None:
+    async def save_callables(self, content: list[dict], a: models.DhscannerAstMetadata) -> None:
 
         for i, _callable in enumerate(content):
             unique_file_id = a.dhscanner_ast_unique_id.removesuffix('.dhscanner.ast')
             callable_name = f'{unique_file_id}.callable.{i}'
             async with aiofiles.open(callable_name, 'wt') as fl:
-                json.dump(_callable, fl)
+                content_as_str = json.dumps(_callable)
+                await fl.write(content_as_str)
 
         LocalStorage.store_callables_metadata_in_db(
             models.CallablesMetadata(

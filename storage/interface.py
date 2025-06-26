@@ -61,7 +61,7 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def save_callables(self, content: list, a: DhscannerAstMetadata) -> None:
+    async def save_callables(self, content: list[dict], a: DhscannerAstMetadata) -> None:
         ...
 
     @abc.abstractmethod
