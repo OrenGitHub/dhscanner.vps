@@ -242,12 +242,13 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def save_dhscanner_ast(self, content: str, a: models.NativeAstMetadata) -> None:
+    async def save_dhscanner_ast(self, content: dict, a: models.NativeAstMetadata) -> None:
 
         unique_file_id = a.native_ast_unique_id.removesuffix('.native.ast')
         dhscanner_ast = f'{unique_file_id}.dhscanner.ast'
         async with aiofiles.open(dhscanner_ast, 'wt') as fl:
-            await fl.write(content)
+            content_as_str = json.dumps(content)
+            await fl.write(content_as_str)
 
         LocalStorage.store_dhscanner_ast_metadata_in_db(
             models.DhscannerAstMetadata(

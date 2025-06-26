@@ -41,7 +41,8 @@ class Context(str, enum.Enum):
     DELETE_DHSCANNER_AST_FILE_FAILED = 'DELETE_DHSCANNER_AST_FILE_FAILED'
     DELETE_DHSCANNER_AST_FILE_SUCCEEDED = 'DELETE_DHSCANNER_AST_FILE_SUCCEEDED'
     DHSCANNER_PARSING_SUCCEEDED = 'DHSCANNER_PARSING_SUCCEEDED'
-    DHSCANNER_PARSER_FAILED = 'DHSCANNER_PARSER_FAILED'
+    DHSCANNER_PARSING_FAILED = 'DHSCANNER_PARSING_FAILED'
+    DHSCANNER_PARSING_SYSTEM_FAILURE = 'DHSCANNER_PARSING_SYSTEM_FAILURE'
     READ_CALLABLES_FILES_FAILED = 'READ_CALLABLES_FILES_FAILED'
     READ_CALLABLES_FILES_SUCCEEDED = 'READ_CALLABLES_FILES_SUCCEEDED'
     DELETE_CALLABLES_FILES_FAILED = 'DELETE_CALLABLES_FILES_FAILED'
@@ -76,29 +77,46 @@ class LogMessage(Base):
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
     duration: Mapped[timedelta] = mapped_column(sqlalchemy.Interval, nullable=False)
+    more_details: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False, default="")
+    corresponding_byte_size: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=False, default=0)
 
     def tojson(self) -> dict:
+        more_details = 'nothing else to add'
+        corresponding_byte_size = 0
+        if self.more_details is not None:
+            more_details = self.more_details
+        if self.corresponding_byte_size is not None:
+            corresponding_byte_size = self.corresponding_byte_size
         return {
             'file_unique_id': self.file_unique_id,
             'job_id': self.job_id,
             'context': self.context.value,
             'original_filename': self.original_filename,
             'language': self.language.value,
-            'duration': self.duration.total_seconds()
+            'duration': self.duration.total_seconds(),
+            'more_details': more_details,
+            'corresponding_byte_size': corresponding_byte_size
         }
 
     @classmethod
     def fromjson(cls, content: dict) -> typing.Optional[LogMessage]:
         try:
+            if 'corresponding_byte_size' not in content:
+                return None
+            if content['corresponding_byte_size'] is None:
+                return None
+            corresponding_byte_size = int(content['corresponding_byte_size'])
             return cls(
                 file_unique_id=content['file_unique_id'],
                 job_id=content['job_id'],
                 context=Context(content['context']),
                 original_filename=content['original_filename'],
                 language=Language(content['language']),
-                duration=timedelta(seconds=content['duration'])
+                duration=timedelta(seconds=content['duration']),
+                more_details=content['more_details'],
+                corresponding_byte_size=corresponding_byte_size
             )
         except KeyError: # missing field(s)
             return None
-        except ValueError: # Enum(s) conversion failed
+        except ValueError: # Enum(s) conversion failed | int conversion failed
             return None

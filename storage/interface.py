@@ -49,7 +49,7 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def save_dhscanner_ast(self, content: str, a: NativeAstMetadata) -> None:
+    async def save_dhscanner_ast(self, content: dict, a: NativeAstMetadata) -> None:
         ...
 
     @abc.abstractmethod
