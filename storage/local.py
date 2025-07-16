@@ -347,7 +347,7 @@ class LocalStorage(interface.Storage):
 
         LocalStorage.store_callables_metadata_in_db(
             models.CallablesMetadata(
-                callable_unique_id=a.dhscanner_ast_unique_id,
+                callable_unique_id=unique_file_id,
                 num_callables=len(content),
                 job_id=a.job_id,
                 original_filename=a.original_filename,
@@ -356,36 +356,72 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def load_callables(self, c: models.CallablesMetadata) -> typing.Optional[dict]:
-
-        callables = {}
-        for i in range(c.num_callables):
-            _callable = f'{c.dhscanner_ast_unique_id}.callable.{i}'
-            async with aiofiles.open(_callable, 'rt') as fl:
-                content = await fl.read()
-                callables[_callable] = json.loads(content)
-
-        return callables
-
-    @typing.override
-    async def delete_callables(self, c: models.CallablesMetadata) -> None:
+    async def load_ith_callable(self, c: models.CallablesMetadata, i) -> typing.Optional[dict]:
+        n = c.num_callables
+        f = c.original_filename
         try:
             start = time.monotonic()
-            for i in range(c.num_callables):
-                _callable = f'{c.callable_unique_id}.callable.{i}'
-                await asyncio.to_thread(os.remove, _callable)
+            fileanme = f'{c.callable_unique_id}.callable.{i}'
+            async with aiofiles.open(fileanme, 'rt') as fl:
+                content = await fl.read()
+                _callable = json.loads(content)
+                end = time.monotonic()
+                delta = end - start
+                await self.logger.warning(
+                    LogMessage(
+                        file_unique_id=c.callable_unique_id,
+                        job_id=c.job_id,
+                        context=Context.READ_CALLABLE_i_FILE_SUCCEEDED,
+                        original_filename=c.original_filename,
+                        language=c.language,
+                        duration=timedelta(seconds=delta),
+                        more_details=f'callable({i}/{n})[{f}]'
+                    )
+                )
+                return _callable
+
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            pass
+        except json.JSONDecodeError:
+            pass
+
+        end = time.monotonic()
+        delta = end - start
+        await self.logger.warning(
+            LogMessage(
+                file_unique_id=c.callable_unique_id,
+                job_id=c.job_id,
+                context=Context.READ_CALLABLE_i_FILE_FAILED,
+                original_filename=c.original_filename,
+                language=c.language,
+                duration=timedelta(seconds=delta),
+                more_details=f'callable({i}/{n})[{f}]'
+            )
+        )
+
+        return None
+
+    @typing.override
+    async def delete_ith_callable(self, c: models.CallablesMetadata, i: int) -> None:
+        try:
+            start = time.monotonic()
+            _callable = f'{c.callable_unique_id}.callable.{i}'
+            await asyncio.to_thread(os.remove, _callable)
             end = time.monotonic()
             delta = end - start
             await self.logger.info(
                 LogMessage(
-                    file_unique_id=c.file_unique_id,
+                    file_unique_id=c.callable_unique_id,
                     job_id=c.job_id,
-                    context=Context.DELETE_CALLABLES_FILES_SUCCEEDED,
+                    context=Context.DELETE_CALLABLE_i_SUCCEEDED,
                     original_filename=c.original_filename,
                     language=c.language,
                     duration=timedelta(seconds=delta)
                 )
             )
+            return
         except FileNotFoundError:
             pass
         except PermissionError:
@@ -395,9 +431,9 @@ class LocalStorage(interface.Storage):
         delta = end - start
         await self.logger.warning(
             LogMessage(
-                file_unique_id=c.dhscanner_ast_unique_id,
+                file_unique_id=c.callable_unique_id,
                 job_id=c.job_id,
-                context=Context.DELETE_CALLABLES_FILES_FAILED,
+                context=Context.DELETE_CALLABLE_i_FAILED,
                 original_filename=c.original_filename,
                 language=c.language,
                 duration=timedelta(seconds=delta)

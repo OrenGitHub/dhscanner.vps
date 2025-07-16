@@ -139,6 +139,11 @@ def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
             if relevant(abspath_filename):
                 filenames.append(abspath_filename)
 
+    if filenames:
+        logging.info(f'[ step 2 ] collected {len(files)} files')
+    else:
+        logging.warning(f'[ step 2 ] no files were collected')
+
     return filenames
 
 def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str) -> typing.Optional[str]:
@@ -289,34 +294,55 @@ def check(job_id: str) -> str:
     headers = status_headers(BEARER_TOKEN)
     with requests.post(url, params=params, headers=headers) as response:
         if response.status_code == http.HTTPStatus.OK:
-            return 'MOMO'
+            try:
+                content = response.json()
+                if 'status' in content:
+                    status = content['status']
+                    if isinstance(status, str):
+                        return status
+            except json.JSONDecodeError:
+                pass
 
-def main(args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+        return 'invalid status response'
 
+def try_connecting_to_server_and_allocate_a_job_id(
+    APPROVED_URL: str,
+    BEARER_TOKEN: str
+) -> typing.Optional[str]:
+
+    connection_established = False
     for _ in range(MAX_ATTEMPTS_CONNECTING_TO_SERVER):
         try:
             job_id = create_job_id(APPROVED_URL, BEARER_TOKEN)
-            if job_id is None: return
-            logging.info(f'[ step 1 ] created job id {job_id}')
-            break
+            if job_id is None: break
+            connection_established = True
+            logging.info(f'[ step 0 ] connection to server established')
+            logging.info(f'[ step 1 ] created job id [ {job_id[:4]}....{job_id[-5:-1]} ]')
+            return job_id
         except requests.exceptions.ConnectionError:
             time.sleep(1)
             pass
 
-    files = collect_relevant_files(args.scan_dirname)
-    if len(files) == 0: return
-    logging.info(f'[ step 2 ] collected {len(files)} files')
+    if not connection_established:
+        logging.warning(f'[ step 0 ] failed connecting to server')
+        return None
 
+def upload_files_succeeded(files: list[pathlib.Path], job_id: str, APPROVED_URL: str, BEARER_TOKEN: str) -> bool:
     logging.info(f'[ step 3 ] uploaded started')
     status = asyncio.run(upload(files, job_id, APPROVED_URL, BEARER_TOKEN))
-    if status is False: return
     logging.info(f'[ step 3 ] uploaded finished')
+    return status
 
-    if analyze(job_id):
-        for _ in range(MAX_NUM_CHECKS):
-            step = check(job_id)
-            logging.info(f'[ step {step} ] finished')
-            time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
+def main(args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+
+    if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN):
+        if files := collect_relevant_files(args.scan_dirname):
+            if upload_files_succeeded(files, job_id, APPROVED_URL, BEARER_TOKEN):
+                if analyze(job_id):
+                    for _ in range(MAX_NUM_CHECKS):
+                        what_should_happen_next = check(job_id)
+                        logging.info(f'[ step 4 ] now {what_should_happen_next}')
+                        time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
 
 if __name__ == "__main__":
     if args := Argparse.run():

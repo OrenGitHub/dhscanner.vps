@@ -65,11 +65,11 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_callables(self, c: CallablesMetadata) -> typing.Optional[dict]:
+    async def load_ith_callable(self, c: CallablesMetadata, i) -> typing.Optional[dict]:
         ...
 
     @abc.abstractmethod
-    async def delete_callables(self, c: CallablesMetadata) -> None:
+    async def delete_ith_callable(self, c: CallablesMetadata, i: int) -> None:
         ...
 
     @abc.abstractmethod
@@ -123,7 +123,7 @@ class Storage(abc.ABC):
     @staticmethod
     def load_callables_metadata_from_db(job_id: str) -> list[CallablesMetadata]:
         with db.SessionLocal() as session:
-            condition_is_satisfied = DhscannerAstMetadata.job_id == job_id
-            stmt = sqlalchemy.select(DhscannerAstMetadata).where(condition_is_satisfied)
+            condition_is_satisfied = CallablesMetadata.job_id == job_id
+            stmt = sqlalchemy.select(CallablesMetadata).where(condition_is_satisfied)
             result = session.execute(stmt).scalars().all()
-            return typing.cast(list[DhscannerAstMetadata], result)
+            return typing.cast(list[CallablesMetadata], result)

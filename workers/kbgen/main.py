@@ -1,4 +1,4 @@
-import json
+import http
 import time
 import typing
 import aiohttp
@@ -7,6 +7,7 @@ import dataclasses
 
 from datetime import timedelta
 
+from coordinator.interface import Status
 from logger.models import Context, LogMessage
 from storage.models import CallablesMetadata, FileMetadata
 from workers.interface import AbstractWorker
@@ -20,8 +21,16 @@ class Kbgen(AbstractWorker):
     async def run(self, job_id: str) -> None:
         callables = self.the_storage_guy.load_callables_metadata_from_db(job_id)
         async with aiohttp.ClientSession() as s:
-            tasks = [self.kbgen_ith_callable(s, c, i) for c, i in enumerate(callables)]
+            tasks = [self.kbgen_ith_callable(s, c, i) for i, c in enumerate(callables)]
             await asyncio.gather(*tasks)
+
+    @typing.override
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            self.the_coordinator.set_status(
+                job_id,
+                Status.WaitingForQueryengine
+            )
 
     async def kbgen_ith_callable(
         self,
@@ -29,27 +38,28 @@ class Kbgen(AbstractWorker):
         c: CallablesMetadata,
         i: int
     ) -> None:
+
         if _callable := await self.read_ith_callablle_file(c, i):
             if content := await self.kbgen(session, _callable, c):
                 await self.the_storage_guy.save_knowledge_base_facts(content, c, i)
-                await self.the_storage_guy.delete_callables(c, i)
+        await self.the_storage_guy.delete_ith_callable(c, i)
 
     async def kbgen(
         self,
         session: aiohttp.ClientSession,
         code: dict[str, typing.Tuple[str, bytes]],
         c: CallablesMetadata
-    ) -> typing.Optional[dict]:
+    ) -> typing.Optional[str]:
         start = time.monotonic()
         try:
             async with session.post(TO_KBGEN_URL, data=code) as response:
-                if response.status == 200:
-                    dhscanner_ast = await response.text()
+                if response.status == http.HTTPStatus.OK:
+                    facts = await response.text()
                     end = time.monotonic()
                     delta = end - start
                     await self.the_logger_dude.info(
                         LogMessage(
-                            file_unique_id=c.file_unique_id,
+                            file_unique_id=c.callable_unique_id,
                             job_id=c.job_id,
                             context=Context.KBGEN_SUCCEEDED,
                             original_filename=c.original_filename,
@@ -57,7 +67,7 @@ class Kbgen(AbstractWorker):
                             duration=timedelta(seconds=delta)
                         )
                     )
-                    return json.loads(dhscanner_ast)['actualCallables']
+                    return facts
 
         except aiohttp.ClientError:
             pass
@@ -66,7 +76,7 @@ class Kbgen(AbstractWorker):
         delta = end - start
         await self.the_logger_dude.info(
             LogMessage(
-                file_unique_id=c.file_unique_id,
+                file_unique_id=c.callable_unique_id,
                 job_id=c.job_id,
                 context=Context.KBGEN_FAILED,
                 original_filename=c.original_filename,
@@ -76,20 +86,5 @@ class Kbgen(AbstractWorker):
         )
         return None
 
-    async def read_ith_callablle_file(
-        self,
-        c: CallablesMetadata,
-        i: int
-    ) -> typing.Optional[dict[str, typing.Tuple[str, bytes]]]:
-
-        f = FileMetadata(
-            f'{c.callable_unique_id}.callable.{i}',
-            c.job_id,
-            c.original_filename,
-            c.language
-        )
-
-        if code := await self.the_storage_guy.load_file(f):
-            return { 'source': (c.original_filename, code) }
-
-        return None
+    async def read_ith_callablle_file(self, c: CallablesMetadata, i: int) -> typing.Optional[dict]:
+        return await self.the_storage_guy.load_ith_callable(c, i)
