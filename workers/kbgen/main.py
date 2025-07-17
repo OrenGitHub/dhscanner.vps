@@ -47,12 +47,13 @@ class Kbgen(AbstractWorker):
     async def kbgen(
         self,
         session: aiohttp.ClientSession,
-        code: dict[str, typing.Tuple[str, bytes]],
+        _callable: dict[str, typing.Tuple[str, bytes]],
         c: CallablesMetadata
     ) -> typing.Optional[str]:
+        emessage = 'none'
         start = time.monotonic()
         try:
-            async with session.post(TO_KBGEN_URL, data=code) as response:
+            async with session.post(TO_KBGEN_URL, json=_callable) as response:
                 if response.status == http.HTTPStatus.OK:
                     facts = await response.text()
                     end = time.monotonic()
@@ -69,8 +70,8 @@ class Kbgen(AbstractWorker):
                     )
                     return facts
 
-        except aiohttp.ClientError:
-            pass
+        except aiohttp.ClientError as e:
+            emessage = str(e)
 
         end = time.monotonic()
         delta = end - start
@@ -81,7 +82,8 @@ class Kbgen(AbstractWorker):
                 context=Context.KBGEN_FAILED,
                 original_filename=c.original_filename,
                 language=c.language,
-                duration=timedelta(seconds=delta)
+                duration=timedelta(seconds=delta),
+                more_details=f'response status: {response.status}, exception(s): {emessage}'
             )
         )
         return None

@@ -449,11 +449,11 @@ class LocalStorage(interface.Storage):
 
         LocalStorage.store_kbgen_facts_metadata_in_db(
             models.KbgenFactsMetadata(
-                c.callable_unique_id,
-                c.num_callables,
-                c.job_id,
-                c.original_filename,
-                c.language
+                knowledge_base_facts_unique_id=c.callable_unique_id,
+                num_callables=c.num_callables,
+                job_id=c.job_id,
+                original_filename=c.original_filename,
+                language=c.language
             )
         )
 
@@ -601,6 +601,12 @@ class LocalStorage(interface.Storage):
 
     @staticmethod
     def store_callables_metadata_in_db(c: models.CallablesMetadata) -> None:
+        with db.SessionLocal() as session:
+            session.add(c)
+            session.commit()
+
+    @staticmethod
+    def store_kbgen_facts_metadata_in_db(c: models.KbgenFactsMetadata) -> None:
         with db.SessionLocal() as session:
             session.add(c)
             session.commit()
