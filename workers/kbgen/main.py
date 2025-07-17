@@ -1,4 +1,5 @@
 import http
+import json
 import time
 import typing
 import aiohttp
@@ -19,9 +20,9 @@ class Kbgen(AbstractWorker):
 
     @typing.override
     async def run(self, job_id: str) -> None:
-        callables = self.the_storage_guy.load_callables_metadata_from_db(job_id)
+        cs = self.the_storage_guy.load_callables_metadata_from_db(job_id)
         async with aiohttp.ClientSession() as s:
-            tasks = [self.kbgen_ith_callable(s, c, i) for i, c in enumerate(callables)]
+            tasks = [self.kbgen_ith_callable(s, c, i) for c in cs for i in range(c.num_callables)]
             await asyncio.gather(*tasks)
 
     @typing.override
@@ -40,7 +41,7 @@ class Kbgen(AbstractWorker):
     ) -> None:
 
         if _callable := await self.read_ith_callablle_file(c, i):
-            if content := await self.kbgen(session, _callable, c):
+            if content := await self.kbgen(session, _callable, c, i):
                 await self.the_storage_guy.save_knowledge_base_facts(content, c, i)
         await self.the_storage_guy.delete_ith_callable(c, i)
 
@@ -48,33 +49,42 @@ class Kbgen(AbstractWorker):
         self,
         session: aiohttp.ClientSession,
         _callable: dict[str, typing.Tuple[str, bytes]],
-        c: CallablesMetadata
+        c: CallablesMetadata,
+        i: int
     ) -> typing.Optional[str]:
         emessage = 'none'
         start = time.monotonic()
         try:
             async with session.post(TO_KBGEN_URL, json=_callable) as response:
                 if response.status == http.HTTPStatus.OK:
-                    facts = await response.text()
+                    facts = await response.json()
                     end = time.monotonic()
                     delta = end - start
-                    await self.the_logger_dude.info(
-                        LogMessage(
-                            file_unique_id=c.callable_unique_id,
-                            job_id=c.job_id,
-                            context=Context.KBGEN_SUCCEEDED,
-                            original_filename=c.original_filename,
-                            language=c.language,
-                            duration=timedelta(seconds=delta)
+                    if 'content' in facts:
+                        await self.the_logger_dude.info(
+                            LogMessage(
+                                file_unique_id=c.callable_unique_id,
+                                job_id=c.job_id,
+                                context=Context.KBGEN_SUCCEEDED,
+                                original_filename=c.original_filename,
+                                language=c.language,
+                                duration=timedelta(seconds=delta),
+                                more_details=f'callable({i+1})'
+                            )
                         )
-                    )
-                    return facts
+                        return facts['content']
 
         except aiohttp.ClientError as e:
             emessage = str(e)
 
+        except json.JSONDecodeError as e:
+            emessage = str(e)
+
         end = time.monotonic()
         delta = end - start
+        part_1 = f'callable({i+1})'
+        part_2 = f'response status: {response.status}'
+        part_3 = f'exception(s): {emessage}'
         await self.the_logger_dude.info(
             LogMessage(
                 file_unique_id=c.callable_unique_id,
@@ -83,7 +93,7 @@ class Kbgen(AbstractWorker):
                 original_filename=c.original_filename,
                 language=c.language,
                 duration=timedelta(seconds=delta),
-                more_details=f'response status: {response.status}, exception(s): {emessage}'
+                more_details=f'{part_1}, {part_2}, {part_3}'
             )
         )
         return None

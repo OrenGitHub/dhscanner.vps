@@ -375,7 +375,7 @@ class LocalStorage(interface.Storage):
                         original_filename=c.original_filename,
                         language=c.language,
                         duration=timedelta(seconds=delta),
-                        more_details=f'callable({i}/{n})[{f}]'
+                        more_details=f'callable({i+1}/{n})'
                     )
                 )
                 return _callable
@@ -397,7 +397,7 @@ class LocalStorage(interface.Storage):
                 original_filename=c.original_filename,
                 language=c.language,
                 duration=timedelta(seconds=delta),
-                more_details=f'callable({i}/{n})[{f}]'
+                more_details=f'callable({i+1}/{n})'
             )
         )
 
