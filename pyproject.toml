@@ -4,13 +4,16 @@ disable = [
     "invalid-name",
     "import-error",
     "line-too-long",
+    "duplicate-code",
     "missing-timeout",
     "ungrouped-imports",
     "wrong-import-order",
+    "superfluous-parens",
     "missing-class-docstring",
     "missing-module-docstring",
     "missing-function-docstring"
 ]
+ignore = ["dhscanner"]
 
 [tool.mypy]
 exclude = "^dhscanner/"

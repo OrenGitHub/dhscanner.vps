@@ -50,6 +50,8 @@ def create_handlers(
 
     limiter = slowapi.Limiter(key_func=lambda request: request.client.host)
 
+    # argument request IS used ( for authentication check )
+    # pylint: disable=unused-argument
     @app.get(f'/api/{approved_url}/getjobid')
     @limiter.limit('100/minute')
     async def _(

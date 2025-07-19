@@ -14,6 +14,7 @@ from storage.models import (
     ResultsMetadata,
 )
 
+# pylint: disable=too-many-public-methods
 @dataclasses.dataclass(frozen=True)
 class Storage(abc.ABC):
 
@@ -77,11 +78,11 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_knowledge_base_facts(self, k: FactsMetadata, i: int) -> list[str]:
+    async def load_knowledge_base_facts(self, f: FactsMetadata) -> list[str]:
         ...
 
     @abc.abstractmethod
-    async def delete_knowledge_base_facts(self, a: FactsMetadata) -> None:
+    async def delete_knowledge_base_facts(self, f: FactsMetadata) -> None:
         ...
 
     @abc.abstractmethod

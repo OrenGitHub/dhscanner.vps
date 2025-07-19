@@ -358,7 +358,6 @@ class LocalStorage(interface.Storage):
     @typing.override
     async def load_ith_callable(self, c: models.CallablesMetadata, i: int) -> typing.Optional[dict]:
         n = c.num_callables
-        f = c.original_filename
         try:
             start = time.monotonic()
             fileanme = f'{c.callable_unique_id}.callable.{i}'

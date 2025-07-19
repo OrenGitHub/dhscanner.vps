@@ -19,6 +19,7 @@ TO_QUERY_ENGINE_URL = 'http://queryengine:5000/check'
 @dataclasses.dataclass(frozen=True)
 class Queryengine(AbstractWorker):
 
+    # pylint: disable=too-many-locals
     @typing.override
     async def run(self, job_id: str) -> None:
         emessage = 'none'

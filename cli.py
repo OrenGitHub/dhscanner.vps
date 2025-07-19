@@ -69,10 +69,10 @@ def existing_non_empty_dirname(name: str) -> pathlib.Path:
 def proper_bool_value(name: str) -> bool:
 
     if name not in ['true', 'false']:
-        message = f'please specify true | false for including testing code'
+        message = 'please specify true | false for including testing code'
         raise argparse.ArgumentTypeError(message)
 
-    return True if name == 'true' else False
+    return name == 'true'
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class Argparse:
@@ -103,13 +103,13 @@ class Argparse:
             help=ARGPARSE_IGNORE_TESTING_CODE_HELP
         )
 
-        args = parser.parse_args()
+        parsed_args = parser.parse_args()
 
         logging.info('[ step 0 ] required args ok 😊')
 
         return Argparse(
-            scan_dirname=args.scan_dirname,
-            ignore_testing_code=args.ignore_testing_code
+            scan_dirname=parsed_args.scan_dirname,
+            ignore_testing_code=parsed_args.ignore_testing_code
         )
 
 def relevant(filename: pathlib.Path) -> bool:
@@ -140,9 +140,9 @@ def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
                 filenames.append(abspath_filename)
 
     if filenames:
-        logging.info(f'[ step 2 ] collected {len(files)} files')
+        logging.info('[ step 2 ] collected %s files', len(filenames))
     else:
-        logging.warning(f'[ step 2 ] no files were collected')
+        logging.warning('[ step 2 ] no files were collected')
 
     return filenames
 
@@ -151,9 +151,9 @@ def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str) -> typing.Optional[str]:
     url = f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/getjobid'
     response = requests.get(url, headers=headers)
     if response.status_code != http.HTTPStatus.OK:
-        logging.error(f'failed to create job id: http status code {response.status_code}')
+        logging.error('failed to create job id: http status code %s', response.status_code)
         return None
-    
+
     try:
         content = response.json()
         return content['job_id']
@@ -187,7 +187,7 @@ async def check_response(response: aiohttp.ClientResponse, filename: str) -> boo
 
     status = response.status
     if status != http.HTTPStatus.OK:
-        logging.error(f'upload failed for {filename} http status: {status}')
+        logging.error('upload failed for %s http status: %s', filename, status)
         return False
 
     try:
@@ -196,8 +196,8 @@ async def check_response(response: aiohttp.ClientResponse, filename: str) -> boo
             if result['status'] == 'ok':
                 return True
     except json.JSONDecodeError:
-        logging.error(f'Invalid upload response for {filename}')
-    
+        logging.error('Invalid upload response for %s', filename)
+
     return False
 
 async def actual_upload(
@@ -207,7 +207,7 @@ async def actual_upload(
     params: dict,
     f: pathlib.Path
 ) -> bool:
-    
+
     try:
         async with aiofiles.open(f, 'rb') as content:
             async with session.post(url, params=params, headers=headers, data=content) as response:
@@ -271,7 +271,7 @@ async def upload(
                 )
             )
         overall_percentage = min(100, (i + 1) * percentage_for_1_batch)
-        logging.info(f'[ step 3 ] uploaded {overall_percentage}{percent}')
+        logging.info('[ step 3 ] uploaded %s%s', overall_percentage, percent)
 
     return all(results)
 
@@ -280,8 +280,8 @@ def analyze_url(APPROVED_URL) -> str:
 
 def analyze(job_id: str) -> bool:
     params = {'job_id': job_id}
-    url = analyze_url(APPROVED_URL)
-    headers = analyze_headers(BEARER_TOKEN)
+    url = analyze_url(APPROVED_URL_0)
+    headers = analyze_headers(APPROVED_BEARER_TOKEN_0)
     with requests.post(url, params=params, headers=headers) as response:
         return response.status_code == http.HTTPStatus.OK
 
@@ -290,8 +290,8 @@ def status_url(APPROVED_URL) -> str:
 
 def check(job_id: str) -> str:
     params = {'job_id': job_id}
-    url = status_url(APPROVED_URL)
-    headers = status_headers(BEARER_TOKEN)
+    url = status_url(APPROVED_URL_0)
+    headers = status_headers(APPROVED_BEARER_TOKEN_0)
     with requests.post(url, params=params, headers=headers) as response:
         if response.status_code == http.HTTPStatus.OK:
             try:
@@ -314,38 +314,39 @@ def try_connecting_to_server_and_allocate_a_job_id(
     for _ in range(MAX_ATTEMPTS_CONNECTING_TO_SERVER):
         try:
             job_id = create_job_id(APPROVED_URL, BEARER_TOKEN)
-            if job_id is None: break
+            if job_id is None:
+                break
             connection_established = True
-            logging.info(f'[ step 0 ] connection to server established')
-            logging.info(f'[ step 1 ] created job id [ {job_id[:4]}....{job_id[-5:-1]} ]')
+            logging.info('[ step 1 ] connection to server established')
+            logging.info('[ step 2 ] created job id [ %s....%s ]', job_id[:4], job_id[-5:-1])
             return job_id
         except requests.exceptions.ConnectionError:
             time.sleep(1)
-            pass
 
     if not connection_established:
-        logging.warning(f'[ step 0 ] failed connecting to server')
-        return None
+        logging.warning('[ step 1 ] failed connecting to server')
+
+    return None
 
 def upload_files_succeeded(files: list[pathlib.Path], job_id: str, APPROVED_URL: str, BEARER_TOKEN: str) -> bool:
-    logging.info(f'[ step 3 ] uploaded started')
+    logging.info('[ step 3 ] uploaded started')
     status = asyncio.run(upload(files, job_id, APPROVED_URL, BEARER_TOKEN))
-    logging.info(f'[ step 3 ] uploaded finished')
+    logging.info('[ step 3 ] uploaded finished')
     return status
 
-def main(args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
     if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN):
-        if files := collect_relevant_files(args.scan_dirname):
+        if files := collect_relevant_files(parsed_args.scan_dirname):
             if upload_files_succeeded(files, job_id, APPROVED_URL, BEARER_TOKEN):
                 if analyze(job_id):
                     for _ in range(MAX_NUM_CHECKS):
                         what_should_happen_next = check(job_id)
-                        logging.info(f'[ step 4 ] now {what_should_happen_next}')
+                        logging.info('[ step 4 ] now %s', what_should_happen_next)
                         time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
 
 if __name__ == "__main__":
     if args := Argparse.run():
-        if APPROVED_URL := os.getenv('APPROVED_URL_0', None):
-            if BEARER_TOKEN := os.getenv('APPROVED_BEARER_TOKEN_0', None):
-                main(args, APPROVED_URL, BEARER_TOKEN)
+        if APPROVED_URL_0 := os.getenv('APPROVED_URL_0', None):
+            if APPROVED_BEARER_TOKEN_0 := os.getenv('APPROVED_BEARER_TOKEN_0', None):
+                main(args, APPROVED_URL_0, APPROVED_BEARER_TOKEN_0)

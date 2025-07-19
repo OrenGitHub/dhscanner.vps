@@ -67,7 +67,7 @@ class Context(str, enum.Enum):
 class Base(DeclarativeBase):
     pass
 
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods,too-many-instance-attributes
 @dataclasses.dataclass(kw_only=True)
 class LogMessage(Base):
 

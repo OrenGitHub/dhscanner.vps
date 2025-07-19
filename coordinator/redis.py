@@ -51,7 +51,7 @@ class RedisCoordinator(interface.Coordinator):
         except redis.exceptions.RedisError:
             await self.logger.warning(
                 LogMessage(
-                    file_unique_id='*', 
+                    file_unique_id='*',
                     job_id='*',
                     context=Context.COORDINATOR_NOT_RESPONDING,
                     original_filename='*',
