@@ -14,7 +14,8 @@ class Status(str, enum.Enum):
     WaitingForCodegen = 'WaitingForCodegen'
     WaitingForKbgen = 'WaitingForKbgen'
     WaitingForQueryengine = 'WaitingForQueryengine'
-    StatusSarifGenerationFinished = 'StatusSarifGenerationFinished'
+    WaitingForResultsGeneration = 'WaitingForResultsGeneration'
+    Finished = 'Finished'
 
     @staticmethod
     def from_raw_string(raw: str) -> typing.Optional[Status]:

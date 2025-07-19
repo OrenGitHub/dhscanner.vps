@@ -356,7 +356,7 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def load_ith_callable(self, c: models.CallablesMetadata, i) -> typing.Optional[dict]:
+    async def load_ith_callable(self, c: models.CallablesMetadata, i: int) -> typing.Optional[dict]:
         n = c.num_callables
         f = c.original_filename
         try:
@@ -443,14 +443,13 @@ class LocalStorage(interface.Storage):
     @typing.override
     async def save_knowledge_base_facts(self, content: list[str], c: models.CallablesMetadata, i: int) -> None:
 
-        facts_filename = f'{c.callable_unique_id}.facts.callable.{i}'
+        facts_filename = f'{c.callable_unique_id}.callable.{i}.facts'
         async with aiofiles.open(facts_filename, 'wt') as fl:
             await fl.write('\n'.join(content))
 
         LocalStorage.store_kbgen_facts_metadata_in_db(
-            models.KbgenFactsMetadata(
-                knowledge_base_facts_unique_id=c.callable_unique_id,
-                num_callables=c.num_callables,
+            models.FactsMetadata(
+                facts_unique_id=facts_filename,
                 job_id=c.job_id,
                 original_filename=c.original_filename,
                 language=c.language
@@ -458,80 +457,92 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def load_knowledge_base_facts(self, k: models.KbgenFactsMetadata, i: int) -> list[str]:
-        facts_filename = f'{k.knowledge_base_facts_unique_id}.facts.callable.{i}'
-        async with aiofiles.open(facts_filename, 'rt') as fl:
-            return await fl.readlines()
+    async def load_knowledge_base_facts(self, f: models.FactsMetadata) -> list[str]:
+        start = time.monotonic()
+        async with aiofiles.open(f.facts_unique_id, 'rt') as fl:
+            lines = await fl.readlines()
+            end = time.monotonic()
+            delta = end - start
+            await self.logger.warning(
+                LogMessage(
+                    file_unique_id=f.facts_unique_id,
+                    job_id=f.job_id,
+                    context=Context.READ_FACTS_FILE_SUCCEEDED,
+                    original_filename=f.original_filename,
+                    language=f.language,
+                    duration=timedelta(seconds=delta)
+                )
+            )
+            return lines
 
     @typing.override
-    async def delete_knowledge_base_facts(self, k: models.KbgenFactsMetadata) -> None:
+    async def delete_knowledge_base_facts(self, f: models.FactsMetadata) -> None:
+        emessage = 'none'
         try:
             start = time.monotonic()
-            for i in range(k.num_callables):
-                facts = f'{k.knowledge_base_facts_unique_id}.facts.callable.{i}'
-                await asyncio.to_thread(os.remove, facts)
+            await asyncio.to_thread(os.remove, f.facts_unique_id)
             end = time.monotonic()
             delta = end - start
             await self.logger.info(
                 LogMessage(
-                    file_unique_id=k.knowledge_base_facts_unique_id,
-                    job_id=k.job_id,
-                    context=Context.DELETE_KBGEN_FACTS_FILES_SUCCEEDED,
-                    original_filename=k.original_filename,
-                    language=k.language,
+                    file_unique_id=f.facts_unique_id,
+                    job_id=f.job_id,
+                    context=Context.DELETE_FACTS_FILE_SUCCEEDED,
+                    original_filename=f.original_filename,
+                    language=f.language,
                     duration=timedelta(seconds=delta)
                 )
             )
-        except FileNotFoundError:
-            pass
-        except PermissionError:
-            pass
+            return
+        except FileNotFoundError as e:
+            emessage = str(e)
+        except PermissionError as e:
+            emessage = str(e)
 
         end = time.monotonic()
         delta = end - start
         await self.logger.warning(
             LogMessage(
-                file_unique_id=k.knowledge_base_facts_unique_id,
-                job_id=k.job_id,
-                context=Context.DELETE_KBGEN_FACTS_FILES_FAILED,
-                original_filename=k.original_filename,
-                language=k.language,
-                duration=timedelta(seconds=delta)
+                file_unique_id=f.facts_unique_id,
+                job_id=f.job_id,
+                context=Context.DELETE_FACTS_FILE_FAILED,
+                original_filename=f.original_filename,
+                language=f.language,
+                duration=timedelta(seconds=delta),
+                more_details=f'exception(s): {emessage}'
             )
         )
 
     @typing.override
-    async def save_results(self, content: dict, job_id: str) -> None:
-        results_filename = f'{str(LocalStorage.jobdir(job_id))}.results.json'
-        async with aiofiles.open(results_filename, 'wt') as fl:
-            json.dump(content, fl)
+    async def save_results(self, content: str, job_id: str) -> None:
+        workdir = str(LocalStorage.jobdir(job_id))
+        results = f'{workdir}/results.txt'
+        async with aiofiles.open(results, 'wt') as fl:
+            fl.write(content)
 
         LocalStorage.store_results_metadata_in_db(
-            models.ResultsMetadata(
-                results_filename,
-                job_id,
-            )
+            models.ResultsMetadata(results=results)
         )
 
     @typing.override
     async def load_results(self, r: models.ResultsMetadata) -> dict:
-        async with aiofiles.open(r.results_unique_id, 'rt') as fl:
+        async with aiofiles.open(r.results, 'rt') as fl:
             return await json.load(fl)
 
     @typing.override
     async def delete_results(self, r: models.ResultsMetadata) -> None:
         try:
             start = time.monotonic()
-            await asyncio.to_thread(os.remove, r.results_unique_id)
+            await asyncio.to_thread(os.remove, r.results)
             end = time.monotonic()
             delta = end - start
             await self.logger.info(
                 LogMessage(
-                    file_unique_id=r.file_unique_id,
+                    file_unique_id=r.results,
                     job_id=r.job_id,
                     context=Context.DELETE_RESULTS_SUCCEEDED,
-                    original_filename=r.original_filename,
-                    language=r.language,
+                    original_filename='*',
+                    language=Language.ALL,
                     duration=timedelta(seconds=delta)
                 )
             )
@@ -544,11 +555,11 @@ class LocalStorage(interface.Storage):
         delta = end - start
         await self.logger.warning(
             LogMessage(
-                file_unique_id=r.dhscanner_ast_unique_id,
+                file_unique_id=r.results,
                 job_id=r.job_id,
                 context=Context.DELETE_RESULTS_FAILED,
-                original_filename=r.original_filename,
-                language=r.language,
+                original_filename='*',
+                language=Language.ALL,
                 duration=timedelta(seconds=delta)
             )
         )
@@ -606,7 +617,7 @@ class LocalStorage(interface.Storage):
             session.commit()
 
     @staticmethod
-    def store_kbgen_facts_metadata_in_db(c: models.KbgenFactsMetadata) -> None:
+    def store_kbgen_facts_metadata_in_db(c: models.FactsMetadata) -> None:
         with db.SessionLocal() as session:
             session.add(c)
             session.commit()

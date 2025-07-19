@@ -1,29 +1,86 @@
-import re
-import json
-import requests
+import http
+import time
+import typing
+import aiohttp
+import asyncio
+import aiofiles
+import dataclasses
 
+from datetime import timedelta
+
+from common.language import Language
+from coordinator.interface import Status
+from storage.models import FactsMetadata
+from logger.models import Context, LogMessage
+from workers.interface import AbstractWorker
 
 TO_QUERY_ENGINE_URL = 'http://queryengine:5000/check'
 
-def compute_line_byte_offsets(code: str) -> dict[int, int]:
-    offsets = {}
-    current_offset = 0
-    for i, line in enumerate(code.splitlines(keepends=True)):
-        offsets[i + 1] = current_offset
-        current_offset += len(line.encode('utf-8'))
-    return offsets
+@dataclasses.dataclass(frozen=True)
+class Queryengine(AbstractWorker):
 
-def remove_tmp_prefix(filename: str) -> str:
-    return re.sub(r"^/tmp/tmp[^/]+/", "", filename)
+    @typing.override
+    async def run(self, job_id: str) -> None:
+        emessage = 'none'
+        start = time.monotonic()
+        files = self.the_storage_guy.load_facts_metadata_from_db(job_id)
+        tasks = [self.read_facts(facts) for facts in files]
+        contents = await asyncio.gather(*tasks)
+        flatten = [fact for facts in contents for fact in facts]
+        kb = '\n'.join(sorted(set(flatten)))
+        form = aiohttp.FormData()
+        form.add_field(name='kb', value=kb, content_type='text/plain')
+        form.add_field(name='queries', value=kb, content_type='text/plain')
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(TO_QUERY_ENGINE_URL, data=form) as response:
+                    if response.status == http.HTTPStatus.OK:
+                        content = {'content': response.text()}
+                        self.the_storage_guy.save_results(content, job_id)
+                        end = time.monotonic()
+                        delta = end - start
+                        await self.the_logger_dude.info(
+                            LogMessage(
+                                file_unique_id=f'queries_{job_id}',
+                                job_id=job_id,
+                                context=Context.QUERYENGINE_SUCCEEDED,
+                                original_filename='*',
+                                language=Language.ALL,
+                                duration=timedelta(seconds=delta)
+                            )
+                        )
+                        return
 
-# pylint: disable=consider-using-with,logging-fstring-interpolation
-def query_engine(kb_filename: str, queries_filename: str, debug: bool) -> str:
+            except aiohttp.ClientError as e:
+                emessage = str(e)
 
-    kb_and_queries = {
-        'kb': ('kb', open(kb_filename, encoding='utf-8')),
-        'queries': ('queries', open(queries_filename, encoding='utf-8')),
-    }
+            end = time.monotonic()
+            delta = end - start
+            part_1 = f'response status: {response.status}'
+            part_2 = f'exception(s): {emessage}'
+            await self.the_logger_dude.info(
+                LogMessage(
+                    file_unique_id=f'queries_{job_id}',
+                    job_id=job_id,
+                    context=Context.QUERYENGINE_FAILED,
+                    original_filename='*',
+                    language=Language.ALL,
+                    duration=timedelta(seconds=delta),
+                    more_details=f'{part_1}, {part_2}'
+                )
+            )
 
-    url = f'{TO_QUERY_ENGINE_URL}'
-    response = requests.post(url, files=kb_and_queries, data={'debug': json.dumps(debug)})
-    return response.text
+    @typing.override
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            self.the_coordinator.set_status(
+                job_id,
+                Status.WaitingForResultsGeneration
+            )
+
+    async def read_facts(self, f: FactsMetadata) -> list[str]:
+        async with aiofiles.open(f.facts_unique_id, 'rt', encoding='utf-8') as fl:
+            lines = await fl.readlines()
+            result = [line.strip() for line in lines]
+        await self.the_storage_guy.delete_knowledge_base_facts(f)
+        return result

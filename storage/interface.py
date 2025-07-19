@@ -9,7 +9,7 @@ from storage.models import (
     CallablesMetadata,
     DhscannerAstMetadata,
     FileMetadata,
-    KbgenFactsMetadata,
+    FactsMetadata,
     NativeAstMetadata,
     ResultsMetadata,
 )
@@ -77,15 +77,15 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_knowledge_base_facts(self, k: KbgenFactsMetadata, i: int) -> list[str]:
+    async def load_knowledge_base_facts(self, k: FactsMetadata, i: int) -> list[str]:
         ...
 
     @abc.abstractmethod
-    async def delete_knowledge_base_facts(self, a: KbgenFactsMetadata) -> None:
+    async def delete_knowledge_base_facts(self, a: FactsMetadata) -> None:
         ...
 
     @abc.abstractmethod
-    async def save_results(self, content: dict, job_id: str) -> None:
+    async def save_results(self, content: str, job_id: str) -> None:
         ...
 
     @abc.abstractmethod
@@ -127,3 +127,11 @@ class Storage(abc.ABC):
             stmt = sqlalchemy.select(CallablesMetadata).where(condition_is_satisfied)
             result = session.execute(stmt).scalars().all()
             return typing.cast(list[CallablesMetadata], result)
+
+    @staticmethod
+    def load_facts_metadata_from_db(job_id: str) -> list[FactsMetadata]:
+        with db.SessionLocal() as session:
+            condition_is_satisfied = FactsMetadata.job_id == job_id
+            stmt = sqlalchemy.select(FactsMetadata).where(condition_is_satisfied)
+            result = session.execute(stmt).scalars().all()
+            return typing.cast(list[FactsMetadata], result)

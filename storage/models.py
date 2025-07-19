@@ -83,20 +83,34 @@ class CallablesMetadata(Base):
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
 
 # pylint: disable=too-few-public-methods
-class KbgenFactsMetadata(Base):
+class FactsMetadata(Base):
+    '''
+    Initialize with keywords
+
+    ---
+
+    - `facts_unique_id`: `str`
+    - `job_id`: `str`
+    - `original_filename`: `str`
+    - `language`: `Language`
+    '''
 
     __tablename__ = 'knowledge_base_facts'
 
-    knowledge_base_facts_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
-    num_callables: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=False)
+    facts_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
     job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
 
 # pylint: disable=too-few-public-methods
 class ResultsMetadata(Base):
+    '''
+    Initialize with keywords
 
+    ---
+
+    - `results`: `str` ( primary )
+    '''
     __tablename__ = 'results'
 
-    results_unique_id: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
-    job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+    results: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)

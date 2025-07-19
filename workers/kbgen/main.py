@@ -10,7 +10,7 @@ from datetime import timedelta
 
 from coordinator.interface import Status
 from logger.models import Context, LogMessage
-from storage.models import CallablesMetadata, FileMetadata
+from storage.models import CallablesMetadata
 from workers.interface import AbstractWorker
 
 TO_KBGEN_URL = 'http://kbgen:3000/kbgen'
