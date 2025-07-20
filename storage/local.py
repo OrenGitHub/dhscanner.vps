@@ -514,13 +514,13 @@ class LocalStorage(interface.Storage):
 
     @typing.override
     async def save_results(self, content: str, job_id: str) -> None:
-        workdir = str(LocalStorage.jobdir(job_id))
-        results = f'{workdir}/results.txt'
+        results = LocalStorage.jobdir(job_id) / 'results.txt'
         async with aiofiles.open(results, 'wt') as fl:
-            fl.write(content)
+            await fl.write(content)
 
+        results_as_str = str(results)
         LocalStorage.store_results_metadata_in_db(
-            models.ResultsMetadata(results=results)
+            models.ResultsMetadata(results=results_as_str)
         )
 
     @typing.override
@@ -619,4 +619,10 @@ class LocalStorage(interface.Storage):
     def store_kbgen_facts_metadata_in_db(c: models.FactsMetadata) -> None:
         with db.SessionLocal() as session:
             session.add(c)
+            session.commit()
+
+    @staticmethod
+    def store_results_metadata_in_db(r: models.ResultsMetadata) -> None:
+        with db.SessionLocal() as session:
+            session.add(r)
             session.commit()

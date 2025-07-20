@@ -36,8 +36,8 @@ class Queryengine(AbstractWorker):
             try:
                 async with session.post(TO_QUERY_ENGINE_URL, data=form) as response:
                     if response.status == http.HTTPStatus.OK:
-                        content = {'content': response.text()}
-                        self.the_storage_guy.save_results(content, job_id)
+                        content = await response.text()
+                        await self.the_storage_guy.save_results(content, job_id)
                         end = time.monotonic()
                         delta = end - start
                         await self.the_logger_dude.info(
