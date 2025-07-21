@@ -137,7 +137,7 @@ def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
         for filename in files:
             abspath_filename = pathlib.Path(root) / filename
             if relevant(abspath_filename):
-                filenames.append(abspath_filename)
+                filenames.append(abspath_filename.relative_to(scan_dirname))
 
     if filenames:
         logging.info('[ step 2 ] collected %s files', len(filenames))
@@ -205,19 +205,21 @@ async def actual_upload(
     url: str,
     headers: dict,
     params: dict,
+    scan_dirname: pathlib.Path,
     f: pathlib.Path
 ) -> bool:
 
     try:
-        async with aiofiles.open(f, 'rb') as content:
+        async with aiofiles.open(scan_dirname / f, 'rb') as content:
             async with session.post(url, params=params, headers=headers, data=content) as response:
                 return await check_response(response, f.name)
     except FileNotFoundError:
-        return None
+        return False
 
 async def upload_single_file(
     session: aiohttp.ClientSession,
     job_id: str,
+    scan_dirname: pathlib.Path,
     f: pathlib.Path,
     APPROVED_URL: str,
     BEARER_TOKEN: str
@@ -225,12 +227,13 @@ async def upload_single_file(
 
     params = {'job_id': job_id}
     url = upload_url(APPROVED_URL)
-    headers = upload_headers(BEARER_TOKEN, str(f.resolve()))
-    return await actual_upload(session, url, headers, params, f)
+    headers = upload_headers(BEARER_TOKEN, f.as_posix())
+    return await actual_upload(session, url, headers, params, scan_dirname, f)
 
 def create_upload_tasks(
     session: aiohttp.ClientSession,
     job_id: int,
+    scan_dirname: pathlib.Path,
     files: list[pathlib.Path],
     APPROVED_URL: str,
     BEARER_TOKEN: str
@@ -239,6 +242,7 @@ def create_upload_tasks(
         upload_single_file(
             session,
             job_id,
+            scan_dirname,
             f,
             APPROVED_URL,
             BEARER_TOKEN,
@@ -247,6 +251,7 @@ def create_upload_tasks(
     ]
 
 async def upload(
+    scan_dirname: pathlib.Path,
     files: list[pathlib.Path],
     job_id: str,
     APPROVED_URL: str,
@@ -265,6 +270,7 @@ async def upload(
                 *create_upload_tasks(
                     session,
                     job_id,
+                    scan_dirname,
                     files[start:end],
                     APPROVED_URL,
                     BEARER_TOKEN
@@ -328,17 +334,32 @@ def try_connecting_to_server_and_allocate_a_job_id(
 
     return None
 
-def upload_files_succeeded(files: list[pathlib.Path], job_id: str, APPROVED_URL: str, BEARER_TOKEN: str) -> bool:
+def upload_files_succeeded(
+    scan_dirname: pathlib.Path,
+    files: list[pathlib.Path],
+    job_id: str,
+    APPROVED_URL: str,
+    BEARER_TOKEN: str
+) -> bool:
     logging.info('[ step 3 ] uploaded started')
-    status = asyncio.run(upload(files, job_id, APPROVED_URL, BEARER_TOKEN))
-    logging.info('[ step 3 ] uploaded finished')
-    return status
+    if asyncio.run(upload(scan_dirname, files, job_id, APPROVED_URL, BEARER_TOKEN)):
+        logging.info('[ step 3 ] uploaded finished')
+        return True
+
+    logging.warning('[ step 3 ] uploaded failed, aborting')
+    return False
 
 def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
     if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN):
         if files := collect_relevant_files(parsed_args.scan_dirname):
-            if upload_files_succeeded(files, job_id, APPROVED_URL, BEARER_TOKEN):
+            if upload_files_succeeded(
+                parsed_args.scan_dirname,
+                files,
+                job_id,
+                APPROVED_URL,
+                BEARER_TOKEN
+            ):
                 if analyze(job_id):
                     for _ in range(MAX_NUM_CHECKS):
                         what_should_happen_next = check(job_id)
