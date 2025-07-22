@@ -30,8 +30,8 @@ class Queryengine(AbstractWorker):
         flatten = [fact for facts in contents for fact in facts]
         kb = '\n'.join(sorted(set(flatten)))
         form = aiohttp.FormData()
-        form.add_field(name='kb', value=kb, content_type='text/plain')
-        form.add_field(name='queries', value=kb, content_type='text/plain')
+        # form.add_field(name='kb', value=kb, content_type='text/plain')
+        form.add_field(name='kb', value=kb.encode(), filename='kb.txt', content_type='text/plain')
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(TO_QUERY_ENGINE_URL, data=form) as response:
