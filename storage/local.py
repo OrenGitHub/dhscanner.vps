@@ -520,13 +520,16 @@ class LocalStorage(interface.Storage):
 
         results_as_str = str(results)
         LocalStorage.store_results_metadata_in_db(
-            models.ResultsMetadata(results=results_as_str)
+            models.ResultsMetadata(
+                results=results_as_str,
+                job_id=job_id
+            )
         )
 
     @typing.override
-    async def load_results(self, r: models.ResultsMetadata) -> dict:
+    async def load_results(self, r: models.ResultsMetadata) -> str:
         async with aiofiles.open(r.results, 'rt') as fl:
-            return await json.load(fl)
+            return await fl.read()
 
     @typing.override
     async def delete_results(self, r: models.ResultsMetadata) -> None:

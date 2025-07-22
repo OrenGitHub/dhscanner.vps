@@ -80,6 +80,8 @@ services:
       *shared-transient-storage
     environment:
       <<: *shared-transient-storage-path
+    networks:
+      - dhscanner
 
 volumes:
   transient_storage:

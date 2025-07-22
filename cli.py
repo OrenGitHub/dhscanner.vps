@@ -363,8 +363,11 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                 if analyze(job_id):
                     for _ in range(MAX_NUM_CHECKS):
                         what_should_happen_next = check(job_id)
-                        logging.info('[ step 4 ] now %s', what_should_happen_next)
-                        time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
+                        if what_should_happen_next != 'Finished':
+                            logging.info('[ step 4 ] now %s', what_should_happen_next)
+                            time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
+                        else:
+                            logging.info('[ step 5 ] Finished 🙂')
 
 if __name__ == "__main__":
     if args := Argparse.run():

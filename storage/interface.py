@@ -90,7 +90,7 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def load_results(self, r: ResultsMetadata) -> dict:
+    async def load_results(self, r: ResultsMetadata) -> str:
         ...
 
     @abc.abstractmethod
@@ -136,3 +136,11 @@ class Storage(abc.ABC):
             stmt = sqlalchemy.select(FactsMetadata).where(condition_is_satisfied)
             result = session.execute(stmt).scalars().all()
             return typing.cast(list[FactsMetadata], result)
+
+    @staticmethod
+    def load_results_metadata_from_db(job_id: str) -> ResultsMetadata:
+        with db.SessionLocal() as session:
+            condition_is_satisfied = ResultsMetadata.job_id == job_id
+            stmt = sqlalchemy.select(ResultsMetadata).where(condition_is_satisfied)
+            result = session.execute(stmt).scalars().first()
+            return typing.cast(ResultsMetadata, result)

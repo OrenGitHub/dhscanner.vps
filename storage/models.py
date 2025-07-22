@@ -110,7 +110,10 @@ class ResultsMetadata(Base):
     ---
 
     - `results`: `str` ( primary )
+    - `job_id`: `str`
     '''
     __tablename__ = 'results'
 
     results: Mapped[str] = mapped_column(sqlalchemy.String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
+

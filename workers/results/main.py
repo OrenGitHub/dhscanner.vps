@@ -2,43 +2,9 @@ import re
 import typing
 import dataclasses
 
-from results import generate_sarif
-
-def remove_tmp_prefix(filename: str) -> str:
-    return re.sub(r"^/tmp/tmp[^/]+/", "", filename)
-
-def patternify(suffix: str) -> str:
-    start = r'startloc_(\d+)_(\d+)'
-    end = r'endloc_(\d+)_(\d+)'
-    fname = fr'([^,]+_dot_{suffix})'
-    loc = fr'{start}_{end}_{fname}'
-    edge = fr'\({loc},{loc}\)'
-    path = fr'{edge}(,{edge})*'
-    query = r'q(\d+)'
-    return fr'{query}\(\[{path}\]\): yes'
-
-def sinkify(
-    match: re.Match,
-    filename: str,
-    offsets: dict[str, dict[int, int]]
-) -> typing.Optional[generate_sarif.Region]:
-
-    n = len(match.groups())
-    for i in reversed(range(5, n)):
-
-        try:
-            locs = [int(match.group(i-d)) for d in reversed(range(4))]
-        except (ValueError, TypeError):
-            continue
-
-        return generate_sarif.Region(
-            startLine=locs[0],
-            startColumn=normalize(filename, locs[0], locs[1], offsets),
-            endLine=locs[2],
-            endColumn=normalize(filename, locs[2], locs[3], offsets)
-        )
-
-    return None
+from common.language import Language
+from coordinator.interface import Status
+from workers.interface import AbstractWorker
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
 class Location:
@@ -67,20 +33,79 @@ class Location:
             return None
 
         return Location(
-            filename=remove_tmp_prefix(candidate['filename']),
+            filename=candidate['filename'],
             lineStart=candidate['lineStart'],
             lineEnd=candidate['lineEnd'],
             colStart=candidate['colStart'],
             colEnd=candidate['colEnd']
         )
 
-def restore(filename: str) -> str:
-    return filename.replace('_slash_', '/').replace('_dot_', '.').replace('_dash_', '-')
+START = r'startloc_(\d+)_(\d+)'
+END = r'endloc_(\d+)_(\d+)'
+FNAME = r'([^,]+)'
+LOC = fr'{START}_{END}_{FNAME}'
+EDGE = fr'\({LOC},{LOC}\)'
+FINDING = r'q(\d+)\(\[(.*?)\]\): yes'
+EDGES_GROUP_IDX_IN_FINDING = 2
 
-def normalize(filename: str, line: int, offset: int, offsets) -> int:
-    if filename in offsets:
-        if line in offsets[filename]:
-            if offset >= offsets[filename][line]:
-                return offset - offsets[filename][line] + 1
+@dataclasses.dataclass(frozen=True)
+class Results(AbstractWorker):
 
-    return offset
+    # pylint: disable=too-many-locals
+    @typing.override
+    async def run(self, job_id: str) -> None:
+        key = self.the_storage_guy.load_results_metadata_from_db(job_id)
+        content = await self.the_storage_guy.load_results(key)
+        if ': yes' in content:
+            p = Results.parse_proper_path(content)
+            print(p, flush=True)
+
+    @typing.override
+    async def mark_jobs_finished(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            self.the_coordinator.set_status(
+                job_id,
+                Status.Finished
+            )
+
+    @staticmethod
+    def parse_proper_path(content: str) -> list[Location]:
+        locations = []
+        if proper_path := re.search(FINDING, content):
+            edges = proper_path.group(EDGES_GROUP_IDX_IN_FINDING)
+            all_edges = re.findall(EDGE, edges)
+            n = len(all_edges)
+            for i, edge in enumerate(all_edges):
+                locations.append(
+                    Location(
+                        filename=Results.restore(edge[4]),
+                        lineStart=int(edge[0]),
+                        colStart=int(edge[1]),
+                        lineEnd=int(edge[2]),
+                        colEnd = int(edge[3])
+                    )
+                )
+                if i == n - 1:
+                    locations.append(
+                        Location(
+                            filename=Results.restore(edge[9]),
+                            lineStart=int(edge[5]),
+                            colStart=int(edge[6]),
+                            lineEnd=int(edge[7]),
+                            colEnd = int(edge[8])
+                        )
+                    )
+            return locations
+
+    @staticmethod
+    def restore(filename: str) -> str:
+        return (
+            filename
+            .replace('_slash_', '/')
+            .replace('_dot_', '.')
+            .replace('_dash_', '-')
+            .replace('_lbracket_', '[')
+            .replace('_rbracket_', ']')
+            .replace('_lparen_', '(')
+            .replace('_rparen_', ')')
+        )
