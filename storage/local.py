@@ -566,6 +566,25 @@ class LocalStorage(interface.Storage):
             )
         )
 
+    @typing.override
+    async def save_output(self, content: dict, job_id: str) -> None:
+        filename = LocalStorage.jobdir(job_id) / 'output.json'
+        async with aiofiles.open(filename, 'wt') as fl:
+            str_content = json.dumps(content)
+            await fl.write(str_content)
+
+    @typing.override
+    async def load_output(self, job_id: str) -> dict:
+        filename = LocalStorage.jobdir(job_id) / 'output.json'
+        async with aiofiles.open(filename, 'rt') as fl:
+            content = await fl.read()
+            return json.loads(content)
+
+    @typing.override
+    async def delete_output(self, job_id: str) -> None:
+        filename = LocalStorage.jobdir(job_id) / 'output.json'
+        await asyncio.to_thread(os.remove, filename)
+
     @staticmethod
     def jobdir(job_id: str) -> pathlib.Path:
         return BASEDIR / job_id

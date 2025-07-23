@@ -12,6 +12,7 @@ from storage.current import get_current_storage_method
 from app import upload
 from app import status
 from app import analyze
+from app import results
 from app import authentication
 
 from storage.interface import Storage
@@ -37,6 +38,10 @@ launch multi-step static code analysis
 """
 
 API_STATUS_JOB_ID_DESCRIPTION: typing.Final[str] = """
+launch multi-step static code analysis
+"""
+
+API_RESULTS_JOB_ID_DESCRIPTION: typing.Final[str] = """
 launch multi-step static code analysis
 """
 
@@ -87,6 +92,16 @@ def create_handlers(
         _=fastapi.Depends(authentication.check)
     ):
         return await status.run(coordinator, job_id)
+
+    @app.post(f'/api/{approved_url}/results')
+    @limiter.limit('100/minute')
+    async def _(
+        request: fastapi.Request,
+        job_id: str = fastapi.Query(..., description=API_RESULTS_JOB_ID_DESCRIPTION),
+        _=fastapi.Depends(authentication.check)
+    ):
+        return await results.run(coordinator, storage, job_id)
+
 
 # every client must have an approved url to access
 # (one url per client, which is also rate limited)

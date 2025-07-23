@@ -311,6 +311,26 @@ def check(job_id: str) -> str:
 
         return 'invalid status response'
 
+def results_url(APPROVED_URL) -> str:
+    return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/results'
+
+def results_headers(BEARER_TOKEN: str) -> dict:
+    return just_authroization_header(BEARER_TOKEN)
+
+def get_results(job_id: str) -> dict:
+    params = {'job_id': job_id}
+    url = results_url(APPROVED_URL_0)
+    headers = results_headers(APPROVED_BEARER_TOKEN_0)
+    with requests.post(url, params=params, headers=headers) as response:
+        if response.status_code == http.HTTPStatus.OK:
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                pass
+
+    logging.warning('received %s', response.status_code)
+    return {}
+
 def try_connecting_to_server_and_allocate_a_job_id(
     APPROVED_URL: str,
     BEARER_TOKEN: str
@@ -367,7 +387,10 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                             logging.info('[ step 4 ] now %s', what_should_happen_next)
                             time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
                         else:
+                            results = get_results(job_id)
                             logging.info('[ step 5 ] Finished 🙂')
+                            logging.info('[ step 6 ] Received Sarif:\n%s', results)
+                            break
 
 if __name__ == "__main__":
     if args := Argparse.run():

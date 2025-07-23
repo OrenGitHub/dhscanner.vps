@@ -97,6 +97,18 @@ class Storage(abc.ABC):
     async def delete_results(self, r: ResultsMetadata) -> None:
         ...
 
+    @abc.abstractmethod
+    async def save_output(self, content: dict, job_id: str) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def load_output(self, job_id: str) -> dict:
+        ...
+
+    @abc.abstractmethod
+    async def delete_output(self, job_id: str) -> None:
+        ...
+
     @staticmethod
     def load_files_metadata_from_db(job_id: str) -> list[FileMetadata]:
         with db.SessionLocal() as session:
