@@ -14,7 +14,7 @@ LOGGER_URL:typing.Final[str] = 'http://logger_server:8000/log'
 class Logger:
 
     @staticmethod
-    async def send_attempt(message: LogMessage, level: Level):
+    async def send_attempt(message: LogMessage, _level: Level):
         url = LOGGER_URL
         data = message.tojson()
         try:

@@ -160,5 +160,5 @@ def run(*, path: list[Location], description: str) -> Sarif:
         codeFlows=code_flows
     )
 
-    run = SarifRun(tool=dhscanner, results=[result])
-    return Sarif(version='2.1.0', runs=[run])
+    one_run = SarifRun(tool=dhscanner, results=[result])
+    return Sarif(version='2.1.0', runs=[one_run])

@@ -12,5 +12,5 @@ async def run(coordinator: Coordinator, storage: Storage, job_id: str) -> dict:
             status_code=http.HTTPStatus.ACCEPTED,
             content={'detail': 'results are not ready yet ... stay tuned !'}
         )
-    
+
     return await storage.load_output(job_id)

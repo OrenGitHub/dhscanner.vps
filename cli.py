@@ -200,6 +200,7 @@ async def check_response(response: aiohttp.ClientResponse, filename: str) -> boo
 
     return False
 
+# pylint: disable=too-many-arguments,too-many-positional-arguments
 async def actual_upload(
     session: aiohttp.ClientSession,
     url: str,
@@ -369,6 +370,20 @@ def upload_files_succeeded(
     logging.warning('[ step 3 ] uploaded failed, aborting')
     return False
 
+# pylint: disable=too-many-nested-blocks
+def remove_loops(sarif: dict) -> dict:
+    for run in sarif.get('runs', []):
+        for result in run.get('results', []):
+            for codeFlow in result.get('codeFlows', []):
+                for threadFlow in codeFlow.get('threadFlows', []):
+                    locations = threadFlow.get('locations', [])
+                    normalized = []
+                    for loc in locations:
+                        if not normalized or json.dumps(loc) != json.dumps(normalized[-1]):
+                            normalized.append(loc)
+                    threadFlow['locations'] = normalized
+    return sarif
+
 def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
     if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN):
@@ -389,7 +404,8 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                         else:
                             results = get_results(job_id)
                             logging.info('[ step 5 ] Finished 🙂')
-                            logging.info('[ step 6 ] Received Sarif:\n%s', results)
+                            normalized = remove_loops(results)
+                            logging.info('[ step 6 ] Received Sarif:\n%s', normalized)
                             break
 
 if __name__ == "__main__":

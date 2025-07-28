@@ -24,8 +24,8 @@ class Results(AbstractWorker):
         content = await self.the_storage_guy.load_results(key)
         if ': yes' in content:
             p = Results.parse_proper_path(content)
-            sarif = Results.generate_sarif_from_path(p)
-            await self.the_storage_guy.save_output(sarif, job_id)
+            sarif_results = Results.generate_sarif_from_path(p)
+            await self.the_storage_guy.save_output(sarif_results, job_id)
 
     @typing.override
     async def mark_jobs_finished(self, job_ids: list[str]) -> None:
@@ -62,7 +62,8 @@ class Results(AbstractWorker):
                             colEnd = int(edge[8])
                         )
                     )
-            return locations
+
+        return locations
 
     @staticmethod
     def restore(filename: str) -> str:
