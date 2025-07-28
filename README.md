@@ -1,3 +1,5 @@
+[![pylint](https://github.com/OrenGitHub/dhscanner.vps/actions/workflows/pylint.yaml/badge.svg)](https://github.com/OrenGitHub/dhscanner.vps/actions/workflows/pylint.yaml)
+
 ## dhscanner.vps
 
 optimized backend for dhscanner
