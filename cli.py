@@ -285,20 +285,20 @@ async def upload(
 def analyze_url(APPROVED_URL) -> str:
     return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/analyze'
 
-def analyze(job_id: str, APPROVED_URL_0: str, APPROVED_BEARER_TOKEN_0: str) -> bool:
+def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> bool:
     params = {'job_id': job_id}
-    url = analyze_url(APPROVED_URL_0)
-    headers = analyze_headers(APPROVED_BEARER_TOKEN_0)
+    url = analyze_url(APPROVED_URL)
+    headers = analyze_headers(APPROVED_BEARER_TOKEN)
     with requests.post(url, params=params, headers=headers) as response:
         return response.status_code == http.HTTPStatus.OK
 
 def status_url(APPROVED_URL) -> str:
     return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/status'
 
-def check(job_id: str, APPROVED_URL_0: str, APPROVED_BEARER_TOKEN_0: str) -> str:
+def check(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> str:
     params = {'job_id': job_id}
-    url = status_url(APPROVED_URL_0)
-    headers = status_headers(APPROVED_BEARER_TOKEN_0)
+    url = status_url(APPROVED_URL)
+    headers = status_headers(APPROVED_BEARER_TOKEN)
     with requests.post(url, params=params, headers=headers) as response:
         if response.status_code == http.HTTPStatus.OK:
             try:
@@ -318,10 +318,10 @@ def results_url(APPROVED_URL) -> str:
 def results_headers(BEARER_TOKEN: str) -> dict:
     return just_authroization_header(BEARER_TOKEN)
 
-def get_results(job_id: str, APPROVED_URL_0: str, APPROVED_BEARER_TOKEN_0: str) -> dict:
+def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> dict:
     params = {'job_id': job_id}
-    url = results_url(APPROVED_URL_0)
-    headers = results_headers(APPROVED_BEARER_TOKEN_0)
+    url = results_url(APPROVED_URL)
+    headers = results_headers(APPROVED_BEARER_TOKEN)
     with requests.post(url, params=params, headers=headers) as response:
         if response.status_code == http.HTTPStatus.OK:
             try:

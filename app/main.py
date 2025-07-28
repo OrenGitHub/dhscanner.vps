@@ -17,7 +17,6 @@ from app import authentication
 
 from storage.interface import Storage
 from coordinator.interface import Coordinator
-from coordinator.redis import RedisCoordinator
 from coordinator.current import get_coordinator_between_workers
 
 app = fastapi.FastAPI(
