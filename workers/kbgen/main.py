@@ -51,7 +51,7 @@ class Kbgen(AbstractWorker):
         _callable: dict[str, typing.Tuple[str, bytes]],
         c: CallablesMetadata,
         i: int
-    ) -> typing.Optional[str]:
+    ) -> typing.Optional[list[str]]:
         emessage = 'none'
         start = time.monotonic()
         try:

@@ -9,7 +9,7 @@ from storage.local import LocalStorage
 
 MAX_NUM_ATTEMPS_CONNECTING_TO_STORAGE_MANAGER: typing.Final[int] = 10
 
-def get_current_storage_method(logger: Logger) -> Storage:
+def get_current_storage_method(logger: Logger) -> typing.Optional[Storage]:
 
     for _ in range(MAX_NUM_ATTEMPS_CONNECTING_TO_STORAGE_MANAGER):
         try:

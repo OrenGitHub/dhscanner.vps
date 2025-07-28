@@ -100,7 +100,7 @@ class DhscannerParser(AbstractWorker):
         session: aiohttp.ClientSession,
         code: dict[str, typing.Tuple[str, bytes]],
         a: NativeAstMetadata
-    ) -> typing.Optional[str]:
+    ) -> typing.Optional[dict]:
         start = time.monotonic()
         url = DHSCANNER_AST_BUILDER_URL[a.language]
         try:
@@ -110,7 +110,7 @@ class DhscannerParser(AbstractWorker):
             }
             async with session.post(url, json=payload) as response:
                 if response.status == http.HTTPStatus.OK:
-                    dhscanner_ast = await response.json()
+                    dhscanner_ast: dict = await response.json()
                     end = time.monotonic()
                     delta = end - start
                     context = Context.DHSCANNER_PARSING_SUCCEEDED
