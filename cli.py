@@ -233,7 +233,7 @@ async def upload_single_file(
 
 def create_upload_tasks(
     session: aiohttp.ClientSession,
-    job_id: int,
+    job_id: str,
     scan_dirname: pathlib.Path,
     files: list[pathlib.Path],
     APPROVED_URL: str,
@@ -285,7 +285,7 @@ async def upload(
 def analyze_url(APPROVED_URL) -> str:
     return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/analyze'
 
-def analyze(job_id: str) -> bool:
+def analyze(job_id: str, APPROVED_URL_0: str, APPROVED_BEARER_TOKEN_0: str) -> bool:
     params = {'job_id': job_id}
     url = analyze_url(APPROVED_URL_0)
     headers = analyze_headers(APPROVED_BEARER_TOKEN_0)
@@ -295,7 +295,7 @@ def analyze(job_id: str) -> bool:
 def status_url(APPROVED_URL) -> str:
     return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/status'
 
-def check(job_id: str) -> str:
+def check(job_id: str, APPROVED_URL_0: str, APPROVED_BEARER_TOKEN_0: str) -> str:
     params = {'job_id': job_id}
     url = status_url(APPROVED_URL_0)
     headers = status_headers(APPROVED_BEARER_TOKEN_0)
@@ -318,7 +318,7 @@ def results_url(APPROVED_URL) -> str:
 def results_headers(BEARER_TOKEN: str) -> dict:
     return just_authroization_header(BEARER_TOKEN)
 
-def get_results(job_id: str) -> dict:
+def get_results(job_id: str, APPROVED_URL_0: str, APPROVED_BEARER_TOKEN_0: str) -> dict:
     params = {'job_id': job_id}
     url = results_url(APPROVED_URL_0)
     headers = results_headers(APPROVED_BEARER_TOKEN_0)
@@ -377,7 +377,7 @@ def remove_loops(sarif: dict) -> dict:
             for codeFlow in result.get('codeFlows', []):
                 for threadFlow in codeFlow.get('threadFlows', []):
                     locations = threadFlow.get('locations', [])
-                    normalized = []
+                    normalized: list = []
                     for loc in locations:
                         if not normalized or json.dumps(loc) != json.dumps(normalized[-1]):
                             normalized.append(loc)
@@ -395,14 +395,14 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                 APPROVED_URL,
                 BEARER_TOKEN
             ):
-                if analyze(job_id):
+                if analyze(job_id, APPROVED_URL, BEARER_TOKEN):
                     for _ in range(MAX_NUM_CHECKS):
-                        what_should_happen_next = check(job_id)
+                        what_should_happen_next = check(job_id, APPROVED_URL, BEARER_TOKEN)
                         if what_should_happen_next != 'Finished':
                             logging.info('[ step 4 ] now %s', what_should_happen_next)
                             time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
                         else:
-                            results = get_results(job_id)
+                            results = get_results(job_id, APPROVED_URL, BEARER_TOKEN)
                             logging.info('[ step 5 ] Finished 🙂')
                             normalized = remove_loops(results)
                             logging.info('[ step 6 ] Received Sarif:\n%s', normalized)

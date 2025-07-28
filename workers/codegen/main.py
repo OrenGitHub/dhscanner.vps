@@ -92,7 +92,7 @@ class Codegen(AbstractWorker):
                 duration=timedelta(seconds=delta)
             )
         )
-        return None
+        return []
 
     async def read_dhscanner_ast_file(self, a: DhscannerAstMetadata) -> typing.Optional[dict]:
         if content := await self.the_storage_guy.load_dhscanner_ast(a):

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from storage.interface import Storage
 from coordinator.interface import Coordinator, Status
 
-async def run(coordinator: Coordinator, storage: Storage, job_id: str) -> dict:
+async def run(coordinator: Coordinator, storage: Storage, job_id: str) -> dict | JSONResponse:
 
     if coordinator.get_status(job_id) != Status.Finished:
         return JSONResponse(

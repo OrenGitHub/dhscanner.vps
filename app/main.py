@@ -18,6 +18,7 @@ from app import authentication
 from storage.interface import Storage
 from coordinator.interface import Coordinator
 from coordinator.redis import RedisCoordinator
+from coordinator.current import get_coordinator_between_workers
 
 app = fastapi.FastAPI(
     docs_url=None,
@@ -129,9 +130,10 @@ def content_type_check(content_type: str = fastapi.Header(..., alias='Content-Ty
 
     return True
 
-def init(coordinator: Coordinator) -> None:
+def init() -> None:
     logger = Logger()
-    storage = get_current_storage_method(logger)
-    define_endpoints(storage, coordinator, logger)
+    if storage := get_current_storage_method(logger):
+        if coordinator := get_coordinator_between_workers(logger):
+            define_endpoints(storage, coordinator, logger)
 
-init(RedisCoordinator(Logger()))
+init()
