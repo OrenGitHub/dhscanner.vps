@@ -1,4 +1,5 @@
 [![pylint](https://github.com/OrenGitHub/dhscanner.vps/actions/workflows/pylint.yaml/badge.svg)](https://github.com/OrenGitHub/dhscanner.vps/actions/workflows/pylint.yaml)
+[![mypy](https://github.com/OrenGitHub/dhscanner.vps/actions/workflows/mypy.yaml/badge.svg)](https://github.com/OrenGitHub/dhscanner.vps/actions/workflows/mypy.yaml)
 
 ## dhscanner.vps
 
