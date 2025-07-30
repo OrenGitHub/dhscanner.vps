@@ -41,7 +41,7 @@ jobs:
       - name: scan CVE_2024_53995
         run: |
           git clone https://github.com/SickChill/sickchill.git
-          git checkout tags/2024.3.1
+          cd sickchill && git checkout tags/2024.3.1 && cd ../
           python cli.py --scan_dirname ./sickchill --ignore_testing_code true --save_sarif_to output.json
 
       - name: fail if output sarif is different from expected
