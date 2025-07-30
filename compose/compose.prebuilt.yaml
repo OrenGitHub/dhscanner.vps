@@ -1,7 +1,7 @@
 services:
 
   parsers:
-    image: orenishdocker/dhscanner-parsers:1.0.41-x64
+    image: orenishdocker/dhscanner-parsers:1.0.42-x64
     networks:
       - dhscanner
   
@@ -16,6 +16,6 @@ services:
       - dhscanner
   
   queryengine:
-    image: orenishdocker/dhscanner-pyswipl:x64
+    image: orenishdocker/dhscanner-pyswipl:1.0.1-x64
     networks:
       - dhscanner
