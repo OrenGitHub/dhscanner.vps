@@ -8,6 +8,9 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    env:
+      APPROVED_URL_0: ${{ secrets.APPROVED_URL_0 }}
+      APPROVED_BEARER_TOKEN_0: ${{ secrets.APPROVED_BEARER_TOKEN_0 }}
 
     steps:
       - name: checkout repo with submodules
