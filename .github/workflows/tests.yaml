@@ -1,0 +1,60 @@
+name: tests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      APPROVED_URL_0: ${{ secrets.APPROVED_URL_0 }}
+      APPROVED_BEARER_TOKEN_0: ${{ secrets.APPROVED_BEARER_TOKEN_0 }}
+
+    steps:
+      - name: checkout repo with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: clone dhscanner.vps (with submodules)
+        run: |
+          docker compose \
+          -f ./compose/compose.base.yaml \
+          -f ./compose/compose.app.yaml \
+          -f ./compose/compose.fronts.yaml \
+          -f ./compose/compose.prebuilt.yaml \
+          -f ./compose/compose.workers.yaml up -d
+
+      - name: wait for dhscanner.vps to be ready
+        run: |
+          for i in {1..10}; do
+            if curl -s -o /dev/null http://127.0.0.1:8000/; then
+              echo "server is ready !"
+              break
+            fi
+            echo "waiting for server ..."
+            sleep 2
+          done
+
+      - name: scan CVE_2024_53995
+        run: |
+          pip install -r requirements.txt
+          git clone https://github.com/SickChill/sickchill.git
+          cd sickchill && git checkout tags/2024.3.1 && cd ../
+          python cli.py --scan_dirname ./sickchill --ignore_testing_code true --save_sarif_to output.json
+
+      - name: fail if output sarif is different from expected
+        run: |
+          set +e
+          delta=$(diff output.json tests/expected/cve_2024_53995.sarif.json)
+          diff_exit=$?
+          set -e
+          if [ "$diff_exit" -ne 0 ]; then
+            echo "$delta"
+            exit 1
+          fi
+
+      - name: remove CVE_2024_53995 tested code
+        run: rm -rf sickchill
