@@ -84,6 +84,7 @@ def valid_output_file(output: str) -> pathlib.Path:
     try:
         with open(candidate, 'w', encoding='utf-8'):
             pass
+    # pylint: disable=raise-missing-from
     except IsADirectoryError:
         raise argparse.ArgumentTypeError(f'{candidate} is not a file ( directory given )')
     except PermissionError:
@@ -433,7 +434,7 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                             logging.info('[ step 5 ] finished 🙂')
                             if output := parsed_args.save_sarif_to:
                                 logging.info('[ step 6 ] saved sarif to: %s', output)
-                                with open(output, 'w') as fl:
+                                with open(output, 'w', encoding='utf-8') as fl:
                                     json.dump(results, fl)
                             else:
                                 logging.info('[ step 6 ] received sarif:\n%s', results)
