@@ -33,6 +33,10 @@ ARGPARSE_SHOW_PARSE_STATUS_FOR_FILE_HELP: typing.Final[str] = """
 print parse status for file
 """
 
+ARGPARSE_SAVE_SARIF_OUTPUT_HELP: typing.Final[str] = """
+save the output in sarif format
+"""
+
 LOCALHOST: typing.Final[str] = 'http://localhost'
 PORT: typing.Final[int] = 8000
 
@@ -74,11 +78,26 @@ def proper_bool_value(name: str) -> bool:
 
     return name == 'true'
 
+def valid_output_file(output: str) -> pathlib.Path:
+    candidate = pathlib.Path(output)
+
+    try:
+        with open(candidate, 'w', encoding='utf-8'):
+            pass
+    # pylint: disable=raise-missing-from
+    except IsADirectoryError:
+        raise argparse.ArgumentTypeError(f'{candidate} is not a file ( directory given )')
+    except PermissionError:
+        raise argparse.ArgumentTypeError(f'no write permission for: {candidate}')
+
+    return candidate
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class Argparse:
 
     scan_dirname: pathlib.Path
     ignore_testing_code: bool
+    save_sarif_to: typing.Optional[pathlib.Path]
 
     @staticmethod
     def run() -> typing.Optional[Argparse]:
@@ -103,13 +122,22 @@ class Argparse:
             help=ARGPARSE_IGNORE_TESTING_CODE_HELP
         )
 
+        parser.add_argument(
+            '--save_sarif_to',
+            required=False,
+            type=valid_output_file,
+            metavar='save/sarif/to/output.json',
+            help=ARGPARSE_SAVE_SARIF_OUTPUT_HELP
+        )
+
         parsed_args = parser.parse_args()
 
         logging.info('[ step 0 ] required args ok 😊')
 
         return Argparse(
             scan_dirname=parsed_args.scan_dirname,
-            ignore_testing_code=parsed_args.ignore_testing_code
+            ignore_testing_code=parsed_args.ignore_testing_code,
+            save_sarif_to=parsed_args.save_sarif_to
         )
 
 def relevant(filename: pathlib.Path) -> bool:
@@ -403,9 +431,13 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                             time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
                         else:
                             results = get_results(job_id, APPROVED_URL, BEARER_TOKEN)
-                            logging.info('[ step 5 ] Finished 🙂')
-                            normalized = remove_loops(results)
-                            logging.info('[ step 6 ] Received Sarif:\n%s', normalized)
+                            logging.info('[ step 5 ] finished 🙂')
+                            if output := parsed_args.save_sarif_to:
+                                logging.info('[ step 6 ] saved sarif to: %s', output)
+                                with open(output, 'w', encoding='utf-8') as fl:
+                                    json.dump(results, fl)
+                            else:
+                                logging.info('[ step 6 ] received sarif:\n%s', results)
                             break
 
 if __name__ == "__main__":
