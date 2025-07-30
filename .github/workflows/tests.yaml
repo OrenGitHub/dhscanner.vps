@@ -48,7 +48,7 @@ jobs:
       - name: fail if output sarif is different from expected
         run: |
           set +e
-          delta=$(diff output.json tests/expected/CVE_2024_53995.sarif)
+          delta=$(diff output.json tests/expected/CVE_2024_53995.sarif.json)
           diff_exit=$?
           set -e
           if [ "$diff_exit" -ne 0 ]; then
