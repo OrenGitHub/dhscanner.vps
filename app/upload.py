@@ -34,6 +34,8 @@ async def run(
         )
     )
 
+    gomod = request.headers.get("X-Module-Name-Resolver-Go.mod")
+
     content = await get_actual_file_content(request)
-    await storage.save_file(content, filename, job_id)
+    await storage.save_file(content, filename, job_id, gomod)
     return {'status': 'ok', 'original_upload_filename': filename}

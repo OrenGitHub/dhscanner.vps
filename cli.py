@@ -141,6 +141,9 @@ class Argparse:
         )
 
 def relevant(filename: pathlib.Path) -> bool:
+    if filename.name == 'go.mod':
+        return True
+
     if filename.suffix.lstrip('.') not in SUFFIXES:
         return False
 
@@ -195,12 +198,22 @@ def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str) -> typing.Optional[str]:
 def upload_url(APPROVED_URL: str) -> str:
     return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/upload'
 
-def upload_headers(BEARER_TOKEN: str, filename: str) -> dict:
-    return {
+def upload_headers(
+    BEARER_TOKEN: str,
+    filename: str,
+    gomod: typing.Optional[str],
+) -> dict:
+
+    headers = {
         'Authorization': f'Bearer {BEARER_TOKEN}',
         'X-Path': filename,
         'Content-Type': 'application/octet-stream'
     }
+
+    if gomod is not None:
+        headers['X-Module-Name-Resolver-Go.mod'] = gomod
+
+    return headers
 
 def just_authroization_header(BEARER_TOKEN: str) -> dict:
     return {'Authorization': f'Bearer {BEARER_TOKEN}'}
@@ -235,7 +248,7 @@ async def actual_upload(
     headers: dict,
     params: dict,
     scan_dirname: pathlib.Path,
-    f: pathlib.Path
+    f: pathlib.Path,
 ) -> bool:
 
     try:
@@ -251,13 +264,25 @@ async def upload_single_file(
     scan_dirname: pathlib.Path,
     f: pathlib.Path,
     APPROVED_URL: str,
-    BEARER_TOKEN: str
+    BEARER_TOKEN: str,
+    gomod: typing.Optional[str]
 ) -> bool:
 
     params = {'job_id': job_id}
     url = upload_url(APPROVED_URL)
-    headers = upload_headers(BEARER_TOKEN, f.as_posix())
+    headers = upload_headers(BEARER_TOKEN, f.as_posix(), gomod)
     return await actual_upload(session, url, headers, params, scan_dirname, f)
+
+def extract_module_name_from(gomod: pathlib.Path) -> typing.Optional[str]:
+    with gomod.open('r') as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped.startswith('module'):
+                parts = stripped.split()
+                if parts[0] == 'module':
+                    if len(parts) == 2:
+                        return parts[1]
+    return None
 
 def create_upload_tasks(
     session: aiohttp.ClientSession,
@@ -267,6 +292,13 @@ def create_upload_tasks(
     APPROVED_URL: str,
     BEARER_TOKEN: str
 ) -> list:
+
+    module_name: typing.Optional[str] = None
+    for f in files:
+        if f.name == 'go.mod':
+            module_name = extract_module_name_from(scan_dirname / f)
+            break
+
     return [
         upload_single_file(
             session,
@@ -275,6 +307,7 @@ def create_upload_tasks(
             f,
             APPROVED_URL,
             BEARER_TOKEN,
+            module_name
         )
         for f in files
     ]
