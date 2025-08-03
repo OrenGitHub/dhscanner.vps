@@ -104,9 +104,13 @@ class DhscannerParser(AbstractWorker):
         start = time.monotonic()
         url = DHSCANNER_AST_BUILDER_URL[a.language]
         try:
+            resolver = '-'
+            if a.module_name_resolver is not None:
+                resolver = a.module_name_resolver
             payload = {
                 'filename': code['source'][0],
-                'content': code['source'][1].decode('utf-8')
+                'content': code['source'][1].decode('utf-8'),
+                'module_name_resolver': resolver
             }
             async with session.post(url, json=payload) as response:
                 if response.status == http.HTTPStatus.OK:

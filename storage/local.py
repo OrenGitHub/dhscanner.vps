@@ -31,7 +31,8 @@ class LocalStorage(interface.Storage):
         self,
         content: typing.AsyncIterator[bytes],
         original_filename_in_repo: str,
-        job_id: str
+        job_id: str,
+        gomod: typing.Optional[str]
     ) -> None:
         start = time.monotonic()
         job_dir = LocalStorage.mk_jobdir_if_needed(job_id)
@@ -43,7 +44,8 @@ class LocalStorage(interface.Storage):
                     file_unique_id=str(stored_filename),
                     job_id=job_id,
                     original_filename=original_filename_in_repo,
-                    language=language
+                    language=language,
+                    module_name_resolver=gomod
                 )
             )
             end = time.monotonic()
@@ -161,7 +163,8 @@ class LocalStorage(interface.Storage):
                 native_ast_unique_id=native_ast,
                 job_id=f.job_id,
                 original_filename=f.original_filename,
-                language=f.language
+                language=f.language,
+                module_name_resolver=f.module_name_resolver
             )
         )
 

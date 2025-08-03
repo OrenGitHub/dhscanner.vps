@@ -19,6 +19,7 @@ class FileMetadata(Base):
     job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
+    module_name_resolver: Mapped[str] = mapped_column(sqlalchemy.String, nullable=True)
 
 # pylint: disable=too-few-public-methods
 class NativeAstMetadata(Base):
@@ -31,6 +32,7 @@ class NativeAstMetadata(Base):
     - `job_id`: `str`
     - `original_filename`: `str`
     - `language`: `Language`
+    - `module_name_resolver`: `typing.Optional[str]` ( like the module in `go.mod` )
     '''
 
     __tablename__ = 'native_asts'
@@ -39,6 +41,7 @@ class NativeAstMetadata(Base):
     job_id: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     original_filename: Mapped[str] = mapped_column(sqlalchemy.String, nullable=False)
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
+    module_name_resolver: Mapped[str] = mapped_column(sqlalchemy.String, nullable=True)
 
 # pylint: disable=too-few-public-methods
 class DhscannerAstMetadata(Base):
