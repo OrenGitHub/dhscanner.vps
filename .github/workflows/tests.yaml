@@ -79,3 +79,24 @@ jobs:
 
       - name: remove CVE_2024_47769 tested code
         run: rm -rf idurar-erp-crm
+
+      - name: scan CVE_2025_22952
+        run: |
+          pip install -r requirements.txt
+          git clone https://github.com/usememos/memos.git
+          cd memos && git checkout tags/v0.23.0 && cd ../
+          python cli.py --scan_dirname ./memos --ignore_testing_code true --save_sarif_to output.json
+
+      - name: fail if output sarif is different from expected
+        run: |
+          set +e
+          delta=$(diff output.json tests/expected/cve_2025_22952.sarif.json)
+          diff_exit=$?
+          set -e
+          if [ "$diff_exit" -ne 0 ]; then
+            echo "$delta"
+            exit 1
+          fi
+
+      - name: remove CVE_2025_22952 tested code
+        run: rm -rf memos
