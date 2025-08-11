@@ -15,14 +15,19 @@ from workers.interface import AbstractWorker
 
 TO_KBGEN_URL = 'http://kbgen:3000/kbgen'
 
+MAX_NUM_CONCURRENT_HTTP_REQUESTS = 50
+MAX_NUM_CONCURRENT_TCP_CONNECTIONS = 100
+
 @dataclasses.dataclass(frozen=True)
 class Kbgen(AbstractWorker):
 
     @typing.override
     async def run(self, job_id: str) -> None:
         cs = self.the_storage_guy.load_callables_metadata_from_db(job_id)
-        async with aiohttp.ClientSession() as s:
-            tasks = [self.kbgen_ith_callable(s, c, i) for c in cs for i in range(c.num_callables)]
+        limit = asyncio.Semaphore(MAX_NUM_CONCURRENT_HTTP_REQUESTS)
+        connector = aiohttp.TCPConnector(limit=MAX_NUM_CONCURRENT_TCP_CONNECTIONS)
+        async with aiohttp.ClientSession(connector=connector) as s:
+            tasks = [self._batched_kbgen(s, c, i, limit) for c in cs for i in range(c.num_callables)]
             await asyncio.gather(*tasks)
 
     @typing.override
@@ -100,3 +105,13 @@ class Kbgen(AbstractWorker):
 
     async def read_ith_callablle_file(self, c: CallablesMetadata, i: int) -> typing.Optional[dict]:
         return await self.the_storage_guy.load_ith_callable(c, i)
+
+    async def _batched_kbgen(
+        self,
+        session: aiohttp.ClientSession,
+        c: CallablesMetadata,
+        i: int,
+        limit: asyncio.Semaphore
+    ) -> None:
+        async with limit:
+            await self.kbgen_ith_callable(session, c, i)
