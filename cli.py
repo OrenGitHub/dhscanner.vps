@@ -46,7 +46,7 @@ SUFFIXES: typing.Final[set[str]] = {
 
 MAX_ATTEMPTS_CONNECTING_TO_SERVER = 10
 UPLOAD_BATCH_SIZE = 100
-MAX_NUM_CHECKS = 100
+MAX_NUM_CHECKS = 200
 NUM_SECONDS_BETEEN_STEP_CHECK = 5
 
 logging.basicConfig(
@@ -140,6 +140,7 @@ class Argparse:
             save_sarif_to=parsed_args.save_sarif_to
         )
 
+# pylint: disable=too-many-return-statements
 def relevant(filename: pathlib.Path) -> bool:
     if filename.name == 'go.mod':
         return True
@@ -151,6 +152,9 @@ def relevant(filename: pathlib.Path) -> bool:
     parts = resolved.parts
     name = str(resolved)
     if 'test' in parts:
+        return False
+
+    if 'tests' in parts:
         return False
 
     if '.test.' in name:

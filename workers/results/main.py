@@ -22,10 +22,13 @@ class Results(AbstractWorker):
     async def run(self, job_id: str) -> None:
         key = self.the_storage_guy.load_results_metadata_from_db(job_id)
         content = await self.the_storage_guy.load_results(key)
+        sarif_results = {'debug': content}
         if ': yes' in content:
             p = Results.parse_proper_path(content)
             sarif_results = Results.generate_sarif_from_path(p)
-            await self.the_storage_guy.save_output(sarif_results, job_id)
+        elif 'TimeoutExpired' in content:
+            sarif_results = {'debug': 'TimeoutExpired'}
+        await self.the_storage_guy.save_output(sarif_results, job_id)
 
     @typing.override
     async def mark_jobs_finished(self, job_ids: list[str]) -> None:
