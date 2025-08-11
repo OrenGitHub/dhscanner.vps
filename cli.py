@@ -140,6 +140,7 @@ class Argparse:
             save_sarif_to=parsed_args.save_sarif_to
         )
 
+# pylint: disable=too-many-return-statements
 def relevant(filename: pathlib.Path) -> bool:
     if filename.name == 'go.mod':
         return True
