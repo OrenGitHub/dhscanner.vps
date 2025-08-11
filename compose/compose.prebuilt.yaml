@@ -16,6 +16,6 @@ services:
       - dhscanner
   
   queryengine:
-    image: orenishdocker/dhscanner-pyswipl:1.0.4-x64
+    image: orenishdocker/dhscanner-pyswipl:1.0.5-x64
     networks:
       - dhscanner
