@@ -6,6 +6,7 @@ import http
 import math
 import json
 import time
+import socket
 import typing
 import pathlib
 import asyncio
@@ -15,6 +16,8 @@ import aiohttp
 import requests
 import argparse
 import dataclasses
+
+from urllib.parse import urlparse
 
 ARGPARSE_PROG_DESC: typing.Final[str] = """
 
@@ -37,6 +40,10 @@ ARGPARSE_SAVE_SARIF_OUTPUT_HELP: typing.Final[str] = """
 save the output in sarif format
 """
 
+ARGPARSE_USE_EXTERNAL_VPS: typing.Final[str] = """
+connect to an external virtual private server
+"""
+
 LOCALHOST: typing.Final[str] = 'http://localhost'
 PORT: typing.Final[int] = 8000
 
@@ -48,6 +55,8 @@ MAX_ATTEMPTS_CONNECTING_TO_SERVER = 10
 UPLOAD_BATCH_SIZE = 100
 MAX_NUM_CHECKS = 200
 NUM_SECONDS_BETEEN_STEP_CHECK = 5
+
+HTTPS_PORT: typing.Final[int] = 443
 
 logging.basicConfig(
     level=logging.INFO,
@@ -92,12 +101,36 @@ def valid_output_file(output: str) -> pathlib.Path:
 
     return candidate
 
+def valid_external_vps(candidate: str) -> str:
+
+    if not candidate.startswith('https://'):
+        message = 'url must start with https://'
+        raise argparse.ArgumentTypeError(message)
+
+    url = urlparse(candidate)
+    hostname = url.hostname
+
+    if hostname is None:
+        message = f'missing host in {candidate}'
+        raise argparse.ArgumentTypeError(message)
+
+    try:
+        with socket.create_connection((hostname, HTTPS_PORT), timeout=2.0):
+            pass
+    except OSError:
+        message = f'unreachable: {hostname}'
+        # pylint: disable=raise-missing-from
+        raise argparse.ArgumentTypeError(message)
+
+    return candidate
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class Argparse:
 
     scan_dirname: pathlib.Path
     ignore_testing_code: bool
     save_sarif_to: typing.Optional[pathlib.Path]
+    use_external_vps: typing.Optional[str]
 
     @staticmethod
     def run() -> typing.Optional[Argparse]:
@@ -130,6 +163,14 @@ class Argparse:
             help=ARGPARSE_SAVE_SARIF_OUTPUT_HELP
         )
 
+        parser.add_argument(
+            '--use_external_vps',
+            required=False,
+            type=valid_external_vps,
+            metavar='https://dhscanner.org',
+            help=ARGPARSE_USE_EXTERNAL_VPS
+        )
+
         parsed_args = parser.parse_args()
 
         logging.info('[ step 0 ] required args ok 😊')
@@ -137,7 +178,8 @@ class Argparse:
         return Argparse(
             scan_dirname=parsed_args.scan_dirname,
             ignore_testing_code=parsed_args.ignore_testing_code,
-            save_sarif_to=parsed_args.save_sarif_to
+            save_sarif_to=parsed_args.save_sarif_to,
+            use_external_vps=parsed_args.use_external_vps
         )
 
 # pylint: disable=too-many-return-statements
@@ -181,9 +223,11 @@ def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
 
     return filenames
 
-def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str) -> typing.Optional[str]:
+def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: Argparse) -> typing.Optional[str]:
     headers = {'Authorization': f'Bearer {BEARER_TOKEN}'}
-    url = f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/getjobid'
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    url = f'{host}:{port}/api/{APPROVED_URL}/getjobid'
     response = requests.get(url, headers=headers)
     if response.status_code != http.HTTPStatus.OK:
         logging.error('failed to create job id: http status code %s', response.status_code)
@@ -199,8 +243,10 @@ def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str) -> typing.Optional[str]:
 
     return None
 
-def upload_url(APPROVED_URL: str) -> str:
-    return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/upload'
+def upload_url(APPROVED_URL: str, parsed_args: Argparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/upload'
 
 def upload_headers(
     BEARER_TOKEN: str,
@@ -269,11 +315,12 @@ async def upload_single_file(
     f: pathlib.Path,
     APPROVED_URL: str,
     BEARER_TOKEN: str,
-    gomod: typing.Optional[str]
+    gomod: typing.Optional[str],
+    parsed_args: Argparse
 ) -> bool:
 
     params = {'job_id': job_id}
-    url = upload_url(APPROVED_URL)
+    url = upload_url(APPROVED_URL, parsed_args)
     headers = upload_headers(BEARER_TOKEN, f.as_posix(), gomod)
     return await actual_upload(session, url, headers, params, scan_dirname, f)
 
@@ -294,7 +341,8 @@ def create_upload_tasks(
     scan_dirname: pathlib.Path,
     files: list[pathlib.Path],
     APPROVED_URL: str,
-    BEARER_TOKEN: str
+    BEARER_TOKEN: str,
+    parsed_args: Argparse
 ) -> list:
 
     module_name: typing.Optional[str] = None
@@ -311,17 +359,20 @@ def create_upload_tasks(
             f,
             APPROVED_URL,
             BEARER_TOKEN,
-            module_name
+            module_name,
+            parsed_args
         )
         for f in files
     ]
 
+# pylint: disable=too-many-locals
 async def upload(
     scan_dirname: pathlib.Path,
     files: list[pathlib.Path],
     job_id: str,
     APPROVED_URL: str,
-    BEARER_TOKEN: str
+    BEARER_TOKEN: str,
+    parsed_args: Argparse
 ) -> bool:
 
     n = len(files)
@@ -339,7 +390,8 @@ async def upload(
                     scan_dirname,
                     files[start:end],
                     APPROVED_URL,
-                    BEARER_TOKEN
+                    BEARER_TOKEN,
+                    parsed_args
                 )
             )
         overall_percentage = min(100, (i + 1) * percentage_for_1_batch)
@@ -347,22 +399,26 @@ async def upload(
 
     return all(results)
 
-def analyze_url(APPROVED_URL) -> str:
-    return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/analyze'
+def analyze_url(APPROVED_URL, parsed_args: Argparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/analyze'
 
-def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> bool:
+def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse) -> bool:
     params = {'job_id': job_id}
-    url = analyze_url(APPROVED_URL)
+    url = analyze_url(APPROVED_URL, parsed_args)
     headers = analyze_headers(APPROVED_BEARER_TOKEN)
     with requests.post(url, params=params, headers=headers) as response:
         return response.status_code == http.HTTPStatus.OK
 
-def status_url(APPROVED_URL) -> str:
-    return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/status'
+def status_url(APPROVED_URL, parsed_args: Argparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/status'
 
-def check(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> str:
+def check(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse) -> str:
     params = {'job_id': job_id}
-    url = status_url(APPROVED_URL)
+    url = status_url(APPROVED_URL, parsed_args)
     headers = status_headers(APPROVED_BEARER_TOKEN)
     with requests.post(url, params=params, headers=headers) as response:
         if response.status_code == http.HTTPStatus.OK:
@@ -377,15 +433,17 @@ def check(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> str:
 
         return 'invalid status response'
 
-def results_url(APPROVED_URL) -> str:
-    return f'{LOCALHOST}:{PORT}/api/{APPROVED_URL}/results'
+def results_url(APPROVED_URL, parsed_args: Argparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/results'
 
 def results_headers(BEARER_TOKEN: str) -> dict:
     return just_authroization_header(BEARER_TOKEN)
 
-def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> dict:
+def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse) -> dict:
     params = {'job_id': job_id}
-    url = results_url(APPROVED_URL)
+    url = results_url(APPROVED_URL, parsed_args)
     headers = results_headers(APPROVED_BEARER_TOKEN)
     with requests.post(url, params=params, headers=headers) as response:
         if response.status_code == http.HTTPStatus.OK:
@@ -399,13 +457,14 @@ def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str) -> d
 
 def try_connecting_to_server_and_allocate_a_job_id(
     APPROVED_URL: str,
-    BEARER_TOKEN: str
+    BEARER_TOKEN: str,
+    parsed_args: Argparse
 ) -> typing.Optional[str]:
 
     connection_established = False
     for _ in range(MAX_ATTEMPTS_CONNECTING_TO_SERVER):
         try:
-            job_id = create_job_id(APPROVED_URL, BEARER_TOKEN)
+            job_id = create_job_id(APPROVED_URL, BEARER_TOKEN, parsed_args)
             if job_id is None:
                 break
             connection_established = True
@@ -425,10 +484,11 @@ def upload_files_succeeded(
     files: list[pathlib.Path],
     job_id: str,
     APPROVED_URL: str,
-    BEARER_TOKEN: str
+    BEARER_TOKEN: str,
+    parsed_args: Argparse
 ) -> bool:
     logging.info('[ step 3 ] uploaded started')
-    if asyncio.run(upload(scan_dirname, files, job_id, APPROVED_URL, BEARER_TOKEN)):
+    if asyncio.run(upload(scan_dirname, files, job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)):
         logging.info('[ step 3 ] uploaded finished')
         return True
 
@@ -451,23 +511,24 @@ def remove_loops(sarif: dict) -> dict:
 
 def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
-    if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN):
+    if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN, parsed_args):
         if files := collect_relevant_files(parsed_args.scan_dirname):
             if upload_files_succeeded(
                 parsed_args.scan_dirname,
                 files,
                 job_id,
                 APPROVED_URL,
-                BEARER_TOKEN
+                BEARER_TOKEN,
+                parsed_args
             ):
-                if analyze(job_id, APPROVED_URL, BEARER_TOKEN):
+                if analyze(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args):
                     for _ in range(MAX_NUM_CHECKS):
-                        what_should_happen_next = check(job_id, APPROVED_URL, BEARER_TOKEN)
+                        what_should_happen_next = check(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
                         if what_should_happen_next != 'Finished':
                             logging.info('[ step 4 ] now %s', what_should_happen_next)
                             time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
                         else:
-                            results = get_results(job_id, APPROVED_URL, BEARER_TOKEN)
+                            results = get_results(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
                             logging.info('[ step 5 ] finished 🙂')
                             if output := parsed_args.save_sarif_to:
                                 logging.info('[ step 6 ] saved sarif to: %s', output)
