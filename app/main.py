@@ -45,7 +45,7 @@ API_RESULTS_JOB_ID_DESCRIPTION: typing.Final[str] = """
 launch multi-step static code analysis
 """
 
-# pylint: disable=cell-var-from-loop,redefined-outer-name
+# pylint: disable=unused-argument,cell-var-from-loop,redefined-outer-name,function-redefined
 def create_handlers(
     approved_url: str,
     coordinator: Coordinator,
@@ -56,7 +56,6 @@ def create_handlers(
     limiter = slowapi.Limiter(key_func=lambda request: request.client.host)
 
     # argument request IS used ( for authentication check )
-    # pylint: disable=unused-argument
     @app.get(f'/api/{approved_url}/getjobid')
     @limiter.limit('100/minute')
     async def _(
@@ -75,6 +74,7 @@ def create_handlers(
     ):
         return await upload.run(request, storage, job_id, filename, logger)
 
+    # argument request IS used ( for authentication check )
     @app.post(f'/api/{approved_url}/analyze')
     @limiter.limit('100/minute')
     async def _(
@@ -84,6 +84,7 @@ def create_handlers(
     ):
         return await analyze.run(coordinator, job_id)
 
+    # argument request IS used ( for authentication check )
     @app.post(f'/api/{approved_url}/status')
     @limiter.limit('100/minute')
     async def _(
@@ -93,6 +94,7 @@ def create_handlers(
     ):
         return await status.run(coordinator, job_id)
 
+    # argument request IS used ( for authentication check )
     @app.post(f'/api/{approved_url}/results')
     @limiter.limit('100/minute')
     async def _(
