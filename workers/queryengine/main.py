@@ -53,7 +53,7 @@ class Queryengine(AbstractWorker):
                             )
                         )
                         return
-                    elif response.status == http.HTTPStatus.GATEWAY_TIMEOUT:
+                    if response.status == http.HTTPStatus.GATEWAY_TIMEOUT:
                         await self.the_storage_guy.save_results('TimeoutExpired', job_id)
                         end = time.monotonic()
                         delta = end - start
