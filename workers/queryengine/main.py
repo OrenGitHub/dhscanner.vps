@@ -53,6 +53,22 @@ class Queryengine(AbstractWorker):
                             )
                         )
                         return
+                    elif response.status == http.HTTPStatus.GATEWAY_TIMEOUT:
+                        await self.the_storage_guy.save_results('TimeoutExpired', job_id)
+                        end = time.monotonic()
+                        delta = end - start
+                        await self.the_logger_dude.info(
+                            LogMessage(
+                                file_unique_id=f'queries_{job_id}',
+                                job_id=job_id,
+                                context=Context.QUERYENGINE_SUCCEEDED,
+                                original_filename='*',
+                                language=Language.ALL,
+                                duration=timedelta(seconds=delta),
+                                more_details='query engine timeout'
+                            )
+                        )
+                        return
 
             except aiohttp.ClientError as e:
                 emessage = str(e)
