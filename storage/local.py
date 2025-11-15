@@ -443,11 +443,11 @@ class LocalStorage(interface.Storage):
         )
 
     @typing.override
-    async def save_knowledge_base_facts(self, content: list[str], c: models.CallablesMetadata, i: int) -> None:
+    async def save_knowledge_base_facts(self, content: list[dict], c: models.CallablesMetadata, i: int) -> None:
 
         facts_filename = f'{c.callable_unique_id}.callable.{i}.facts'
         async with aiofiles.open(facts_filename, 'wt') as fl:
-            await fl.write('\n'.join(content))
+            await fl.write(json.dumps(content))
 
         LocalStorage.store_kbgen_facts_metadata_in_db(
             models.FactsMetadata(

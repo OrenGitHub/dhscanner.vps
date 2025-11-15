@@ -56,8 +56,8 @@ class Kbgen(AbstractWorker):
         _callable: dict[str, typing.Tuple[str, bytes]],
         c: CallablesMetadata,
         i: int
-    ) -> typing.Optional[list[str]]:
-        emessage = 'none'
+    ) -> typing.Optional[list[dict]]:
+        emessage = 'no exceptions'
         start = time.monotonic()
         try:
             async with session.post(TO_KBGEN_URL, json=_callable) as response:
@@ -65,19 +65,18 @@ class Kbgen(AbstractWorker):
                     facts = await response.json()
                     end = time.monotonic()
                     delta = end - start
-                    if 'content' in facts:
-                        await self.the_logger_dude.info(
-                            LogMessage(
-                                file_unique_id=c.callable_unique_id,
-                                job_id=c.job_id,
-                                context=Context.KBGEN_SUCCEEDED,
-                                original_filename=c.original_filename,
-                                language=c.language,
-                                duration=timedelta(seconds=delta),
-                                more_details=f'callable({i+1})'
-                            )
+                    await self.the_logger_dude.info(
+                        LogMessage(
+                            file_unique_id=c.callable_unique_id,
+                            job_id=c.job_id,
+                            context=Context.KBGEN_SUCCEEDED,
+                            original_filename=c.original_filename,
+                            language=c.language,
+                            duration=timedelta(seconds=delta),
+                            more_details=f'callable({i+1})[#facts={len(facts)}]'
                         )
-                        return facts['content']
+                    )
+                    return facts
 
         except aiohttp.ClientError as e:
             emessage = str(e)
@@ -88,8 +87,7 @@ class Kbgen(AbstractWorker):
         end = time.monotonic()
         delta = end - start
         part_1 = f'callable({i+1})'
-        part_2 = f'response status: {response.status}'
-        part_3 = f'exception(s): {emessage}'
+        part_2 = f'exception(s): {emessage}'
         await self.the_logger_dude.info(
             LogMessage(
                 file_unique_id=c.callable_unique_id,
@@ -98,7 +96,7 @@ class Kbgen(AbstractWorker):
                 original_filename=c.original_filename,
                 language=c.language,
                 duration=timedelta(seconds=delta),
-                more_details=f'{part_1}, {part_2}, {part_3}'
+                more_details=f'{part_1}, {part_2}'
             )
         )
         return None

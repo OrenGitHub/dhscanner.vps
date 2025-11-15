@@ -15,7 +15,7 @@ from storage.models import FactsMetadata
 from logger.models import Context, LogMessage
 from workers.interface import AbstractWorker
 
-TO_QUERY_ENGINE_URL = 'http://queryengine:5000/querycheck'
+TO_QUERY_ENGINE_URL = 'http://queryengine:3000/querycheck'
 
 @dataclasses.dataclass(frozen=True)
 class Queryengine(AbstractWorker):
@@ -23,7 +23,7 @@ class Queryengine(AbstractWorker):
     # pylint: disable=too-many-locals
     @typing.override
     async def run(self, job_id: str) -> None:
-        emessage = 'none'
+        emessage = 'no exception'
         start = time.monotonic()
         files = self.the_storage_guy.load_facts_metadata_from_db(job_id)
         tasks = [self.read_facts_json(facts) for facts in files]
@@ -32,6 +32,7 @@ class Queryengine(AbstractWorker):
         all_facts = []
         for fact_list in contents:
             all_facts.extend(fact_list)
+
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(TO_QUERY_ENGINE_URL, json=all_facts) as response:
@@ -75,8 +76,7 @@ class Queryengine(AbstractWorker):
 
             end = time.monotonic()
             delta = end - start
-            part_1 = f'response status: {response.status}'
-            part_2 = f'exception(s): {emessage}'
+            part_1 = f'exception(s): {emessage}'
             await self.the_logger_dude.info(
                 LogMessage(
                     file_unique_id=f'queries_{job_id}',
@@ -85,7 +85,7 @@ class Queryengine(AbstractWorker):
                     original_filename='*',
                     language=Language.ALL,
                     duration=timedelta(seconds=delta),
-                    more_details=f'{part_1}, {part_2}'
+                    more_details=f'{part_1}'
                 )
             )
 
