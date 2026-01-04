@@ -223,6 +223,37 @@ def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
 
     return filenames
 
+def collect_directories_and_filenames(
+    files: list[pathlib.Path]
+) -> tuple[list[str], list[str]]:
+    """
+    Collect all directories containing source files and all filenames.
+    Returns (directories, filenames) where:
+    - directories: list of directory paths (as strings) that contain source files
+    - filenames: list of all filenames (as strings) relative to the source directory root
+    """
+    directories_set: set[str] = set()
+    filenames_list: list[str] = []
+
+    for f in files:
+        # Convert to string path relative to scan_dirname
+        file_str = f.as_posix()
+        filenames_list.append(file_str)
+
+        # Get the directory containing this file
+        file_dir = f.parent
+        if file_dir != pathlib.Path('.'):
+            dir_str = file_dir.as_posix()
+            directories_set.add(dir_str)
+        else:
+            # File is in root, add empty string or '.' to represent root
+            directories_set.add('')
+
+    # Convert set to sorted list for consistent ordering
+    directories_list = sorted(list(directories_set))
+
+    return directories_list, filenames_list
+
 def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: Argparse) -> typing.Optional[str]:
     headers = {'Authorization': f'Bearer {BEARER_TOKEN}'}
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
@@ -404,11 +435,12 @@ def analyze_url(APPROVED_URL, parsed_args: Argparse) -> str:
     port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
     return f'{host}:{port}/api/{APPROVED_URL}/analyze'
 
-def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse) -> bool:
+def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse, directories: list[str], filenames: list[str]) -> bool:
     params = {'job_id': job_id}
     url = analyze_url(APPROVED_URL, parsed_args)
     headers = analyze_headers(APPROVED_BEARER_TOKEN)
-    with requests.post(url, params=params, headers=headers) as response:
+    body = { 'directories': directories, 'filenames': filenames }
+    with requests.post(url, params=params, headers=headers, json=body) as response:
         return response.status_code == http.HTTPStatus.OK
 
 def status_url(APPROVED_URL, parsed_args: Argparse) -> str:
@@ -513,6 +545,7 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
     if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN, parsed_args):
         if files := collect_relevant_files(parsed_args.scan_dirname):
+            directories, filenames = collect_directories_and_filenames(files)
             if upload_files_succeeded(
                 parsed_args.scan_dirname,
                 files,
@@ -521,7 +554,7 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                 BEARER_TOKEN,
                 parsed_args
             ):
-                if analyze(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args):
+                if analyze(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args, directories, filenames):
                     for _ in range(MAX_NUM_CHECKS):
                         what_should_happen_next = check(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
                         if what_should_happen_next != 'Finished':
