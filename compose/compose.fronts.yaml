@@ -32,6 +32,8 @@ services:
     build:
       context: ../dhscanner/dhscanner.0.fronts/py
       dockerfile: Dockerfile
+      args:
+        TZ: ${TZ:-Asia/Jerusalem}
     networks:
       - dhscanner
 
