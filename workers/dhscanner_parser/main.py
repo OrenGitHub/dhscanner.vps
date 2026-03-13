@@ -99,7 +99,7 @@ class DhscannerParser(AbstractWorker):
                 await self.the_storage_guy.save_dhscanner_ast(content, a)
         await self.the_storage_guy.delete_native_ast(a)
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     async def parse(
         self,
         session: aiohttp.ClientSession,
