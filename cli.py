@@ -484,7 +484,14 @@ def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, pars
             except json.JSONDecodeError:
                 pass
 
-    logging.warning('received %s', response.status_code)
+    match response.status_code:
+        case http.HTTPStatus.INTERNAL_SERVER_ERROR:
+            status = http.HTTPStatus.INTERNAL_SERVER_ERROR.phrase
+            code = response.status_code
+            logging.warning('received %s (%s)', status, code)
+            return {}
+
+    logging.warning('received unknown status (%s)', response.status_code)
     return {}
 
 def try_connecting_to_server_and_allocate_a_job_id(

@@ -92,6 +92,24 @@ class Queryengine(AbstractWorker):
     @typing.override
     async def mark_jobs_finished(self, job_ids: list[str]) -> None:
         for job_id in job_ids:
+            if self.the_storage_guy.load_results_metadata_from_db(job_id) is None:
+                await self.the_logger_dude.info(
+                    LogMessage(
+                        file_unique_id=f'queries_{job_id}',
+                        job_id=job_id,
+                        context=Context.QUERYENGINE_FAILED,
+                        original_filename='*',
+                        language=Language.ALL,
+                        duration=timedelta(seconds=0),
+                        more_details='results metadata missing'
+                    )
+                )
+                self.the_coordinator.set_status(
+                    job_id,
+                    Status.Finished
+                )
+                continue
+
             self.the_coordinator.set_status(
                 job_id,
                 Status.WaitingForResultsGeneration
