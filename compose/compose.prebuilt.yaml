@@ -1,21 +1,21 @@
 services:
 
   parsers:
-    image: orenishdocker/dhscanner-parsers:1.0.57-x64
+    image: orenishdocker/dhscanner-parsers:1.0.61-x64
     networks:
       - dhscanner
   
   codegen:
-    image: orenishdocker/dhscanner-codegen:1.0.19-x64
+    image: orenishdocker/dhscanner-codegen:1.0.24-x64
     networks:
       - dhscanner
   
   kbgen:
-    image: orenishdocker/dhscanner-kbgen:1.0.19-x64
+    image: orenishdocker/dhscanner-kbgen:1.0.25-x64
     networks:
       - dhscanner
   
   queryengine:
-    image: orenishdocker/dhscanner-queryengine:1.0.14-x64
+    image: orenishdocker/dhscanner-queryengine:1.0.24-x64
     networks:
       - dhscanner
