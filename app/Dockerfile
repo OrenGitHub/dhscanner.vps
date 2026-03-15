@@ -10,4 +10,4 @@ COPY coordinator coordinator
 EXPOSE 8000
 COPY app/entrypoint.sh .
 RUN chmod +x /app/entrypoint.sh
-CMD ["app/entrypoint.sh"]
+CMD ["./entrypoint.sh"]

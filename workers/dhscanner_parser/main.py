@@ -4,6 +4,7 @@ import http
 import json
 import time
 import typing
+import pathlib
 import aiohttp
 import asyncio
 import dataclasses
@@ -18,7 +19,7 @@ from logger.models import (
 
 from common.language import Language
 from workers.interface import AbstractWorker
-from storage.models import NativeAstMetadata
+from storage.models import FileMetadata, NativeAstMetadata
 
 DHSCANNER_AST_BUILDER_URL = {
     Language.JS: 'http://parsers:3000/from/js/to/dhscanner/ast',
@@ -71,8 +72,10 @@ class DhscannerParser(AbstractWorker):
     @typing.override
     async def run(self, job_id: str) -> None:
         asts = self.the_storage_guy.load_native_asts_metadata_from_db(job_id)
+        all_files = self.the_storage_guy.load_files_metadata_from_db(job_id)
+        directories, filenames = self._collect_directories_and_filenames(all_files)
         async with aiohttp.ClientSession() as session:
-            tasks = [self.run_single_ast(session, f) for f in asts]
+            tasks = [self.run_single_ast(session, f, directories, filenames) for f in asts]
             await asyncio.gather(*tasks)
 
     @typing.override
@@ -86,31 +89,34 @@ class DhscannerParser(AbstractWorker):
     async def run_single_ast(
         self,
         session: aiohttp.ClientSession,
-        a: NativeAstMetadata
+        a: NativeAstMetadata,
+        directories: list[str],
+        filenames: list[str]
     ) -> None:
 
         if native_ast := await self.read_native_ast_file(a):
-            if content := await self.parse(session, native_ast, a):
+            if content := await self.parse(session, native_ast, a, directories, filenames):
                 await self.the_storage_guy.save_dhscanner_ast(content, a)
         await self.the_storage_guy.delete_native_ast(a)
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     async def parse(
         self,
         session: aiohttp.ClientSession,
         code: dict[str, typing.Tuple[str, bytes]],
-        a: NativeAstMetadata
+        a: NativeAstMetadata,
+        directories: list[str],
+        filenames: list[str]
     ) -> typing.Optional[dict]:
         start = time.monotonic()
         url = DHSCANNER_AST_BUILDER_URL[a.language]
         try:
-            resolver = '-'
-            if a.module_name_resolver is not None:
-                resolver = a.module_name_resolver
             payload = {
                 'filename': code['source'][0],
                 'content': code['source'][1].decode('utf-8'),
-                'module_name_resolver': resolver
+                'optional_github_url': None,
+                'source_containing_dirs': directories,
+                'all_filenames': filenames
             }
             async with session.post(url, json=payload) as response:
                 if response.status == http.HTTPStatus.OK:
@@ -171,3 +177,24 @@ class DhscannerParser(AbstractWorker):
             return { 'source': (a.original_filename, code) }
 
         return None
+
+    @staticmethod
+    def _collect_directories_and_filenames(
+        files: list[FileMetadata]
+    ) -> tuple[list[str], list[str]]:
+
+        directories_set: set[str] = set()
+        filenames_list: list[str] = []
+
+        for f in files:
+            file_path = pathlib.Path(f.original_filename)
+            filenames_list.append(f.original_filename)
+
+            file_dir = file_path.parent
+            if file_dir != pathlib.Path('.'):
+                dir_str = file_dir.as_posix()
+                directories_set.add(dir_str)
+
+        directories_list = sorted(list(directories_set))
+
+        return directories_list, filenames_list

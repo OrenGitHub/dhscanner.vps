@@ -75,7 +75,7 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def save_knowledge_base_facts(self, content: list[str], c: CallablesMetadata, i: int) -> None:
+    async def save_knowledge_base_facts(self, content: list[dict], c: CallablesMetadata, i: int) -> None:
         ...
 
     @abc.abstractmethod
