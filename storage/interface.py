@@ -26,7 +26,8 @@ class Storage(abc.ABC):
         content: typing.AsyncIterator[bytes],
         original_filename_in_repo: str,
         job_id: str,
-        gomod: typing.Optional[str]
+        gomod: typing.Optional[str],
+        github_url: typing.Optional[str]
     ) -> None:
         ...
 
