@@ -75,7 +75,7 @@ class DhscannerParser(AbstractWorker):
         all_files = self.the_storage_guy.load_files_metadata_from_db(job_id)
         directories, filenames = self._collect_directories_and_filenames(all_files)
         async with aiohttp.ClientSession() as session:
-            tasks = [self.run_single_ast(session, f, directories, filenames) for f in asts]
+            tasks = [self.run_single_ast(session, f, directories, filenames, f.github_url) for f in asts]
             await asyncio.gather(*tasks)
 
     @typing.override
@@ -86,16 +86,18 @@ class DhscannerParser(AbstractWorker):
                 Status.WaitingForCodegen
             )
 
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     async def run_single_ast(
         self,
         session: aiohttp.ClientSession,
         a: NativeAstMetadata,
         directories: list[str],
-        filenames: list[str]
+        filenames: list[str],
+        github_url: typing.Optional[str]
     ) -> None:
 
         if native_ast := await self.read_native_ast_file(a):
-            if content := await self.parse(session, native_ast, a, directories, filenames):
+            if content := await self.parse(session, native_ast, a, directories, filenames, github_url):
                 await self.the_storage_guy.save_dhscanner_ast(content, a)
         await self.the_storage_guy.delete_native_ast(a)
 
@@ -106,7 +108,8 @@ class DhscannerParser(AbstractWorker):
         code: dict[str, typing.Tuple[str, bytes]],
         a: NativeAstMetadata,
         directories: list[str],
-        filenames: list[str]
+        filenames: list[str],
+        github_url: typing.Optional[str]
     ) -> typing.Optional[dict]:
         start = time.monotonic()
         url = DHSCANNER_AST_BUILDER_URL[a.language]
@@ -114,7 +117,7 @@ class DhscannerParser(AbstractWorker):
             payload = {
                 'filename': code['source'][0],
                 'content': code['source'][1].decode('utf-8'),
-                'optional_github_url': None,
+                'optional_github_url': github_url,
                 'source_containing_dirs': directories,
                 'all_filenames': filenames
             }

@@ -10,6 +10,7 @@ import socket
 import typing
 import pathlib
 import asyncio
+import subprocess
 import logging
 import aiofiles
 import aiohttp
@@ -57,6 +58,12 @@ MAX_NUM_CHECKS = 200
 NUM_SECONDS_BETEEN_STEP_CHECK = 5
 
 HTTPS_PORT: typing.Final[int] = 443
+HTTPS_PREFIX: typing.Final[str] = 'https://'
+DOT_GIT_SUFFIX: typing.Final[str] = '.git'
+LEN_HTTPS_PREFIX: typing.Final[int] = len(HTTPS_PREFIX)
+LEN_DOT_GIT_SUFFIX: typing.Final[int] = len(DOT_GIT_SUFFIX)
+GIT_AT_PREFIX: typing.Final[str] = 'git@'
+LEN_GIT_AT_PREFIX: typing.Final[int] = len(GIT_AT_PREFIX)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -283,6 +290,7 @@ def upload_headers(
     BEARER_TOKEN: str,
     filename: str,
     gomod: typing.Optional[str],
+    github_url: typing.Optional[str],
 ) -> dict:
 
     headers = {
@@ -293,6 +301,8 @@ def upload_headers(
 
     if gomod is not None:
         headers['X-Module-Name-Resolver-Go.mod'] = gomod
+    if github_url is not None:
+        headers['X-GitHub-URL'] = github_url
 
     return headers
 
@@ -347,12 +357,13 @@ async def upload_single_file(
     APPROVED_URL: str,
     BEARER_TOKEN: str,
     gomod: typing.Optional[str],
+    github_url: typing.Optional[str],
     parsed_args: Argparse
 ) -> bool:
 
     params = {'job_id': job_id}
     url = upload_url(APPROVED_URL, parsed_args)
-    headers = upload_headers(BEARER_TOKEN, f.as_posix(), gomod)
+    headers = upload_headers(BEARER_TOKEN, f.as_posix(), gomod, github_url)
     return await actual_upload(session, url, headers, params, scan_dirname, f)
 
 def extract_module_name_from(gomod: pathlib.Path) -> typing.Optional[str]:
@@ -366,6 +377,31 @@ def extract_module_name_from(gomod: pathlib.Path) -> typing.Optional[str]:
                         return parts[1]
     return None
 
+def extract_github_url_from(scan_dirname: pathlib.Path) -> typing.Optional[str]:
+    try:
+        extract_github_url = subprocess.run(
+            ['git', 'config', '--get', 'remote.origin.url'],
+            cwd=scan_dirname,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return None
+
+    raw = extract_github_url.stdout.strip()
+    if not raw:
+        return None
+
+    if raw.startswith(HTTPS_PREFIX) and raw.endswith(DOT_GIT_SUFFIX):
+        return raw[LEN_HTTPS_PREFIX:-LEN_DOT_GIT_SUFFIX]
+
+    if raw.startswith(GIT_AT_PREFIX) and raw.endswith(DOT_GIT_SUFFIX):
+        normalized = raw[LEN_GIT_AT_PREFIX:-LEN_DOT_GIT_SUFFIX]
+        return normalized.replace(':', '/')
+
+    return None
+
 def create_upload_tasks(
     session: aiohttp.ClientSession,
     job_id: str,
@@ -377,6 +413,7 @@ def create_upload_tasks(
 ) -> list:
 
     module_name: typing.Optional[str] = None
+    github_url = extract_github_url_from(scan_dirname)
     for f in files:
         if f.name == 'go.mod':
             module_name = extract_module_name_from(scan_dirname / f)
@@ -391,6 +428,7 @@ def create_upload_tasks(
             APPROVED_URL,
             BEARER_TOKEN,
             module_name,
+            github_url,
             parsed_args
         )
         for f in files

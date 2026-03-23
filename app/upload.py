@@ -35,7 +35,8 @@ async def run(
     )
 
     gomod = request.headers.get("X-Module-Name-Resolver-Go.mod")
+    github_url = request.headers.get("X-GitHub-URL")
 
     content = await get_actual_file_content(request)
-    await storage.save_file(content, filename, job_id, gomod)
+    await storage.save_file(content, filename, job_id, gomod, github_url)
     return {'status': 'ok', 'original_upload_filename': filename}

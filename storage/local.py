@@ -26,13 +26,15 @@ BASEDIR: typing.Final[pathlib.Path] = pathlib.Path(
 # pylint: disable=too-many-public-methods
 class LocalStorage(interface.Storage):
 
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     @typing.override
     async def save_file(
         self,
         content: typing.AsyncIterator[bytes],
         original_filename_in_repo: str,
         job_id: str,
-        gomod: typing.Optional[str]
+        gomod: typing.Optional[str],
+        github_url: typing.Optional[str]
     ) -> None:
         start = time.monotonic()
         job_dir = LocalStorage.mk_jobdir_if_needed(job_id)
@@ -45,7 +47,8 @@ class LocalStorage(interface.Storage):
                     job_id=job_id,
                     original_filename=original_filename_in_repo,
                     language=language,
-                    module_name_resolver=gomod
+                    module_name_resolver=gomod,
+                    github_url=github_url
                 )
             )
             end = time.monotonic()
@@ -164,7 +167,8 @@ class LocalStorage(interface.Storage):
                 job_id=f.job_id,
                 original_filename=f.original_filename,
                 language=f.language,
-                module_name_resolver=f.module_name_resolver
+                module_name_resolver=f.module_name_resolver,
+                github_url=f.github_url
             )
         )
 
