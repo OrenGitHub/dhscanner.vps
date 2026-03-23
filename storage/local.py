@@ -26,6 +26,7 @@ BASEDIR: typing.Final[pathlib.Path] = pathlib.Path(
 # pylint: disable=too-many-public-methods
 class LocalStorage(interface.Storage):
 
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     @typing.override
     async def save_file(
         self,

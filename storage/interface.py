@@ -20,6 +20,7 @@ class Storage(abc.ABC):
 
     logger: Logger
 
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     @abc.abstractmethod
     async def save_file(
         self,

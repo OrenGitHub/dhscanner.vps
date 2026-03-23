@@ -86,6 +86,7 @@ class DhscannerParser(AbstractWorker):
                 Status.WaitingForCodegen
             )
 
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     async def run_single_ast(
         self,
         session: aiohttp.ClientSession,
