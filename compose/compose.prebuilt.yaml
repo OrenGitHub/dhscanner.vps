@@ -11,11 +11,11 @@ services:
       - dhscanner
   
   kbgen:
-    image: orenishdocker/dhscanner-kbgen:1.0.27-x64
+    image: orenishdocker/dhscanner-kbgen:1.0.28-x64
     networks:
       - dhscanner
   
   queryengine:
-    image: orenishdocker/dhscanner-queryengine:1.0.31-x64
+    image: orenishdocker/dhscanner-queryengine:1.0.32-x64
     networks:
       - dhscanner
