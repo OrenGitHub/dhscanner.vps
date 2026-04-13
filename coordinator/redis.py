@@ -53,7 +53,7 @@ class RedisCoordinator(interface.Coordinator):
     @typing.override
     def set_agent_mode(self, job_id: str, agent_mode: bool) -> None:
         key = self.get_agent_mode_key(job_id)
-        self.redis_client.set(key, agent_mode)
+        self.redis_client.set(key, str(agent_mode))
 
     @typing.override
     async def get_jobs_waiting_for(self, desired_status: interface.Status) -> list[str]:
