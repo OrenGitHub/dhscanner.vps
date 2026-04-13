@@ -16,29 +16,81 @@ from logger.models import Context, LogMessage
 from workers.interface import AbstractWorker
 
 TO_QUERY_ENGINE_URL = 'http://queryengine:3000/querycheck'
+TO_QUERY_ENGINE_URL_UPLOAD_ONLY = 'http://queryengine:3000/uploadkb'
 
 @dataclasses.dataclass(frozen=True)
 class Queryengine(AbstractWorker):
 
-    # pylint: disable=too-many-locals
     @typing.override
     async def run(self, job_id: str) -> None:
-        emessage = 'no exception'
-        start = time.monotonic()
         files = self.the_storage_guy.load_facts_metadata_from_db(job_id)
         tasks = [self.read_facts_json(facts) for facts in files]
         contents = await asyncio.gather(*tasks)
-        # Concatenate all JSON fact lists into one big list
-        all_facts = []
+        all_facts: list[dict] = []
         for fact_list in contents:
             all_facts.extend(fact_list)
+
+        if self.the_coordinator.get_agent_mode(job_id):
+            await self.run_with_agent_mode(job_id, all_facts)
+        else:
+            await self.run_without_agent(job_id, all_facts)
+
+    async def run_with_agent_mode(self, job_id: str, all_facts: list[dict]) -> None:
+        emessage = 'no exception'
+        start = time.monotonic()
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(TO_QUERY_ENGINE_URL_UPLOAD_ONLY, json=all_facts) as response:
+                    if response.status == http.HTTPStatus.OK:
+                        result_json: dict[str, str] = await response.json()
+                        if kb_location := result_json.get('kb_location', None):
+                            self.the_coordinator.set_kb_location(job_id, kb_location)
+                            end = time.monotonic()
+                            delta = end - start
+                            await self.the_logger_dude.info(
+                                LogMessage(
+                                    file_unique_id=f'queries_{job_id}',
+                                    job_id=job_id,
+                                    context=Context.KBGEN_UPLOADED_FOR_AGENT,
+                                    original_filename='*',
+                                    language=Language.ALL,
+                                    duration=timedelta(seconds=delta)
+                                )
+                            )
+                            return
+
+                        # probably unreachable code since an ok response
+                        # means everything went well on the server side
+                        emessage = 'invalid json response without kb location'
+
+            except aiohttp.ClientError as e:
+                emessage = str(e)
+
+            end = time.monotonic()
+            delta = end - start
+            await self.the_logger_dude.info(
+                LogMessage(
+                    file_unique_id=f'queries_{job_id}',
+                    job_id=job_id,
+                    context=Context.KBGEN_UPLOAD_FOR_AGENT_FAILED,
+                    original_filename='*',
+                    language=Language.ALL,
+                    duration=timedelta(seconds=delta),
+                    more_details=f'exception(s): {emessage}'
+                )
+            )
+
+    # pylint: disable=too-many-locals
+    async def run_without_agent(self, job_id: str, all_facts: list[dict]) -> None:
+        emessage = 'no exception'
+        start = time.monotonic()
 
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.post(TO_QUERY_ENGINE_URL, json=all_facts) as response:
                     if response.status == http.HTTPStatus.OK:
                         result_json = await response.json()
-                        # Extract stdout from the JSON response
                         content = result_json.get('stdout', '')
                         await self.the_storage_guy.save_results(content, job_id)
                         end = time.monotonic()
@@ -76,7 +128,6 @@ class Queryengine(AbstractWorker):
 
             end = time.monotonic()
             delta = end - start
-            part_1 = f'exception(s): {emessage}'
             await self.the_logger_dude.info(
                 LogMessage(
                     file_unique_id=f'queries_{job_id}',
@@ -85,7 +136,7 @@ class Queryengine(AbstractWorker):
                     original_filename='*',
                     language=Language.ALL,
                     duration=timedelta(seconds=delta),
-                    more_details=f'{part_1}'
+                    more_details=f'exception(s): {emessage}'
                 )
             )
 
