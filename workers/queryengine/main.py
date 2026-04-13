@@ -59,8 +59,10 @@ class Queryengine(AbstractWorker):
                                 )
                             )
                             return
-                        else:
-                            emessage = 'invalid json response without kb location'
+
+                        # probably unreachable code since an ok response
+                        # means everything went well on the server side
+                        emessage = 'invalid json response without kb location'
 
             except aiohttp.ClientError as e:
                 emessage = str(e)
