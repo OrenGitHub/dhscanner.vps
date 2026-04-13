@@ -488,7 +488,7 @@ def analyze_url(APPROVED_URL, parsed_args: Argparse) -> str:
     return f'{host}:{port}/api/{APPROVED_URL}/analyze'
 
 def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse, directories: list[str], filenames: list[str]) -> bool:
-    params = {'job_id': job_id, 'agent_mode': parsed_args.with_agent}
+    params = {'job_id': job_id, 'agent_mode': str(parsed_args.with_agent).lower()}
     url = analyze_url(APPROVED_URL, parsed_args)
     headers = analyze_headers(APPROVED_BEARER_TOKEN)
     body = { 'directories': directories, 'filenames': filenames }
