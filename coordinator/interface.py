@@ -38,5 +38,21 @@ class Coordinator(abc.ABC):
         ...
 
     @abc.abstractmethod
+    def get_agent_mode(self, job_id: str) -> bool:
+        ...
+
+    @abc.abstractmethod
+    def set_agent_mode(self, job_id: str, agent_mode: bool) -> None:
+        ...
+
+    @abc.abstractmethod
+    def get_kb_location(self, job_id: str) -> typing.Optional[str]:
+        ...
+
+    @abc.abstractmethod
+    def set_kb_location(self, job_id: str, kb_location: str) -> None:
+        ...
+
+    @abc.abstractmethod
     async def get_jobs_waiting_for(self, desired_status: Status) -> list[str]:
         ...

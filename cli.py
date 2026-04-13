@@ -45,6 +45,10 @@ ARGPARSE_USE_EXTERNAL_VPS: typing.Final[str] = """
 connect to an external virtual private server
 """
 
+ARGPARSE_WITH_AGENT: typing.Final[str] = """
+use an LLM agent for adaptive query planning
+"""
+
 LOCALHOST: typing.Final[str] = 'http://localhost'
 PORT: typing.Final[int] = 8000
 
@@ -138,6 +142,7 @@ class Argparse:
     ignore_testing_code: bool
     save_sarif_to: typing.Optional[pathlib.Path]
     use_external_vps: typing.Optional[str]
+    with_agent: bool
 
     @staticmethod
     def run() -> typing.Optional[Argparse]:
@@ -178,6 +183,14 @@ class Argparse:
             help=ARGPARSE_USE_EXTERNAL_VPS
         )
 
+        parser.add_argument(
+            '--with_agent',
+            required=False,
+            default=False,
+            action='store_true',
+            help=ARGPARSE_WITH_AGENT
+        )
+
         parsed_args = parser.parse_args()
 
         logging.info('[ step 0 ] required args ok 😊')
@@ -186,7 +199,8 @@ class Argparse:
             scan_dirname=parsed_args.scan_dirname,
             ignore_testing_code=parsed_args.ignore_testing_code,
             save_sarif_to=parsed_args.save_sarif_to,
-            use_external_vps=parsed_args.use_external_vps
+            use_external_vps=parsed_args.use_external_vps,
+            with_agent=parsed_args.with_agent
         )
 
 # pylint: disable=too-many-return-statements
@@ -474,7 +488,7 @@ def analyze_url(APPROVED_URL, parsed_args: Argparse) -> str:
     return f'{host}:{port}/api/{APPROVED_URL}/analyze'
 
 def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse, directories: list[str], filenames: list[str]) -> bool:
-    params = {'job_id': job_id}
+    params = {'job_id': job_id, 'agent_mode': parsed_args.with_agent}
     url = analyze_url(APPROVED_URL, parsed_args)
     headers = analyze_headers(APPROVED_BEARER_TOKEN)
     body = { 'directories': directories, 'filenames': filenames }
