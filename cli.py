@@ -275,6 +275,124 @@ def collect_directories_and_filenames(
 
     return directories_list, filenames_list
 
+def resolve_file_mappings(
+    scan_dirname: pathlib.Path,
+    files: list[pathlib.Path]
+) -> dict[str, list[dict[str, str]]]:
+    """
+    Resolve path alias mappings from tsconfig.json files.
+    Returns a dict mapping each source file to its applicable (prefix, replacement) pairs.
+    E.g. {"src/app/page.tsx": [{"from": "@/", "to": "src/"}]}
+    """
+    root = scan_dirname.resolve()
+
+    # Collect all tsconfig.json files in the repo.
+    tsconfigs: list[pathlib.Path] = []
+    for dirpath, _, filenames in os.walk(root):
+        if 'tsconfig.json' in filenames:
+            tsconfigs.append(pathlib.Path(dirpath) / 'tsconfig.json')
+
+    if not tsconfigs:
+        return {}
+
+    # Pre-compute normalized mappings for each tsconfig directory.
+    # Entry format: (tsconfig_dir_abs, mappings)
+    by_tsconfig: list[tuple[pathlib.Path, list[dict[str, str]]]] = []
+    for tsconfig in tsconfigs:
+        try:
+            with tsconfig.open('r', encoding='utf-8') as fh:
+                content = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        compiler_options = content.get('compilerOptions', {})
+        if not isinstance(compiler_options, dict):
+            continue
+
+        paths = compiler_options.get('paths', {})
+        if not isinstance(paths, dict):
+            continue
+
+        base_url_raw = compiler_options.get('baseUrl', '.')
+        if not isinstance(base_url_raw, str):
+            base_url_raw = '.'
+
+        tsconfig_dir = tsconfig.parent.resolve()
+        base_dir = (tsconfig_dir / base_url_raw).resolve()
+
+        mappings: list[dict[str, str]] = []
+        for alias, targets in paths.items():
+            if not isinstance(alias, str):
+                continue
+            if not isinstance(targets, list) or not targets:
+                continue
+
+            first_target = targets[0]
+            if not isinstance(first_target, str):
+                continue
+
+            # Keep the alias prefix as the "actual prefix".
+            # Examples:
+            # - "@src/*" -> "@src"
+            # - "@/apps/*" -> "@/apps"
+            from_prefix = alias
+            if from_prefix.endswith('/*'):
+                from_prefix = from_prefix[:-2]
+            elif from_prefix.endswith('*'):
+                from_prefix = from_prefix[:-1]
+            from_prefix = from_prefix.rstrip('/')
+            if not from_prefix:
+                continue
+
+            # Normalize target and resolve it against tsconfig baseUrl.
+            # Then convert to project-root-relative path.
+            target = first_target
+            if target.endswith('/*'):
+                target = target[:-2]
+            elif target.endswith('*'):
+                target = target[:-1]
+            target = target.replace('\\', '/').strip()
+            if not target:
+                continue
+
+            target_abs = pathlib.Path(target)
+            if not target_abs.is_absolute():
+                target_abs = (base_dir / target).resolve()
+
+            try:
+                target_rel = target_abs.relative_to(root).as_posix()
+            except ValueError:
+                # Ignore mappings that resolve outside project root.
+                continue
+
+            if target_rel == '.':
+                target_rel = ''
+            target_rel = target_rel.lstrip('./')
+
+            mappings.append({'from': from_prefix, 'to': target_rel})
+
+        if mappings:
+            by_tsconfig.append((tsconfig_dir, mappings))
+
+    if not by_tsconfig:
+        return {}
+
+    # Nearest tsconfig directory (deepest ancestor) wins for each file.
+    by_tsconfig.sort(key=lambda item: len(item[0].parts), reverse=True)
+
+    result: dict[str, list[dict[str, str]]] = {}
+    for rel_file in files:
+        abs_file = (root / rel_file).resolve()
+        for tsconfig_dir, mappings in by_tsconfig:
+            try:
+                abs_file.relative_to(tsconfig_dir)
+                result[rel_file.as_posix()] = mappings
+                break
+            except ValueError:
+                continue
+
+    return result
+
 def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: Argparse) -> typing.Optional[str]:
     headers = {'Authorization': f'Bearer {BEARER_TOKEN}'}
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
@@ -305,6 +423,7 @@ def upload_headers(
     filename: str,
     gomod: typing.Optional[str],
     github_url: typing.Optional[str],
+    path_mappings: typing.Optional[str] = None,
 ) -> dict:
 
     headers = {
@@ -317,6 +436,8 @@ def upload_headers(
         headers['X-Module-Name-Resolver-Go.mod'] = gomod
     if github_url is not None:
         headers['X-GitHub-URL'] = github_url
+    if path_mappings is not None:
+        headers['X-Path-Mappings'] = path_mappings
 
     return headers
 
@@ -372,12 +493,13 @@ async def upload_single_file(
     BEARER_TOKEN: str,
     gomod: typing.Optional[str],
     github_url: typing.Optional[str],
+    path_mappings: typing.Optional[str],
     parsed_args: Argparse
 ) -> bool:
 
     params = {'job_id': job_id}
     url = upload_url(APPROVED_URL, parsed_args)
-    headers = upload_headers(BEARER_TOKEN, f.as_posix(), gomod, github_url)
+    headers = upload_headers(BEARER_TOKEN, f.as_posix(), gomod, github_url, path_mappings)
     return await actual_upload(session, url, headers, params, scan_dirname, f)
 
 def extract_module_name_from(gomod: pathlib.Path) -> typing.Optional[str]:
@@ -416,6 +538,15 @@ def extract_github_url_from(scan_dirname: pathlib.Path) -> typing.Optional[str]:
 
     return None
 
+def get_path_mappings_header(
+    file_mappings: dict[str, list[dict[str, str]]],
+    f: pathlib.Path
+) -> typing.Optional[str]:
+    mappings: typing.Optional[list[dict[str, str]]] = file_mappings.get(f.as_posix())
+    if not mappings:
+        return None
+    return json.dumps(mappings)
+
 def create_upload_tasks(
     session: aiohttp.ClientSession,
     job_id: str,
@@ -433,6 +564,8 @@ def create_upload_tasks(
             module_name = extract_module_name_from(scan_dirname / f)
             break
 
+    file_mappings = resolve_file_mappings(scan_dirname, files)
+
     return [
         upload_single_file(
             session,
@@ -443,6 +576,7 @@ def create_upload_tasks(
             BEARER_TOKEN,
             module_name,
             github_url,
+            get_path_mappings_header(file_mappings, f),
             parsed_args
         )
         for f in files
@@ -482,7 +616,7 @@ async def upload(
 
     return all(results)
 
-def analyze_url(APPROVED_URL, parsed_args: Argparse) -> str:
+def analyze_url(APPROVED_URL: str, parsed_args: Argparse) -> str:
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
     port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
     return f'{host}:{port}/api/{APPROVED_URL}/analyze'

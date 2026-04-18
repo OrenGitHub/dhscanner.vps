@@ -34,7 +34,8 @@ class LocalStorage(interface.Storage):
         original_filename_in_repo: str,
         job_id: str,
         gomod: typing.Optional[str],
-        github_url: typing.Optional[str]
+        github_url: typing.Optional[str],
+        path_mappings: typing.Optional[list[dict[str, str]]] = None
     ) -> None:
         start = time.monotonic()
         job_dir = LocalStorage.mk_jobdir_if_needed(job_id)
@@ -48,7 +49,8 @@ class LocalStorage(interface.Storage):
                     original_filename=original_filename_in_repo,
                     language=language,
                     module_name_resolver=gomod,
-                    github_url=github_url
+                    github_url=github_url,
+                    path_mappings=path_mappings
                 )
             )
             end = time.monotonic()
@@ -168,7 +170,8 @@ class LocalStorage(interface.Storage):
                 original_filename=f.original_filename,
                 language=f.language,
                 module_name_resolver=f.module_name_resolver,
-                github_url=f.github_url
+                github_url=f.github_url,
+                path_mappings=f.path_mappings
             )
         )
 

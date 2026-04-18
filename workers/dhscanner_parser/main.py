@@ -119,7 +119,8 @@ class DhscannerParser(AbstractWorker):
                 'content': code['source'][1].decode('utf-8'),
                 'optional_github_url': github_url,
                 'source_containing_dirs': directories,
-                'all_filenames': filenames
+                'all_filenames': filenames,
+                'path_mappings': a.path_mappings
             }
             async with session.post(url, json=payload) as response:
                 if response.status == http.HTTPStatus.OK:
