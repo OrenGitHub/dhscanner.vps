@@ -42,7 +42,7 @@ class Codegen(AbstractWorker):
         if dhscanner_ast := await self.read_dhscanner_ast_file(a):
             if content := await self.codegen(session, dhscanner_ast, a):
                 await self.the_storage_guy.save_callables(content, a)
-        # await self.the_storage_guy.delete_dhscanner_ast(a)
+        await self.the_storage_guy.delete_dhscanner_ast(a)
 
     async def codegen(
         self,
