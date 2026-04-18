@@ -28,7 +28,8 @@ class Storage(abc.ABC):
         original_filename_in_repo: str,
         job_id: str,
         gomod: typing.Optional[str],
-        github_url: typing.Optional[str]
+        github_url: typing.Optional[str],
+        path_mappings: typing.Optional[list[dict[str, str]]] = None
     ) -> None:
         ...
 

@@ -1,3 +1,4 @@
+import typing
 import sqlalchemy
 
 from sqlalchemy.orm import DeclarativeBase # type: ignore[attr-defined]
@@ -21,6 +22,7 @@ class FileMetadata(Base):
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
     module_name_resolver: Mapped[str] = mapped_column(sqlalchemy.String, nullable=True)
     github_url: Mapped[str] = mapped_column(sqlalchemy.String, nullable=True)
+    path_mappings: Mapped[typing.Optional[list[dict[str, str]]]] = mapped_column(sqlalchemy.JSON, nullable=True)
 
 # pylint: disable=too-few-public-methods
 class NativeAstMetadata(Base):
@@ -35,6 +37,7 @@ class NativeAstMetadata(Base):
     - `language`: `Language`
     - `module_name_resolver`: `typing.Optional[str]` ( like the module in `go.mod` )
     - `github_url`: `typing.Optional[str]`
+    - `path_mappings`: `typing.Optional[list[dict[str, str]]]` ( JSON: [{"from": ..., "to": ...}] )
     '''
 
     __tablename__ = 'native_asts'
@@ -45,6 +48,7 @@ class NativeAstMetadata(Base):
     language: Mapped[Language] = mapped_column(sqlalchemy.Enum(Language), nullable=False)
     module_name_resolver: Mapped[str] = mapped_column(sqlalchemy.String, nullable=True)
     github_url: Mapped[str] = mapped_column(sqlalchemy.String, nullable=True)
+    path_mappings: Mapped[typing.Optional[list[dict[str, str]]]] = mapped_column(sqlalchemy.JSON, nullable=True)
 
 # pylint: disable=too-few-public-methods
 class DhscannerAstMetadata(Base):
