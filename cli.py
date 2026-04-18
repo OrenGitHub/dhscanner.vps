@@ -275,6 +275,7 @@ def collect_directories_and_filenames(
 
     return directories_list, filenames_list
 
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements
 def resolve_file_mappings(
     scan_dirname: pathlib.Path,
     files: list[pathlib.Path]
