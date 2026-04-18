@@ -37,6 +37,10 @@ API_ANALYZE_JOB_ID_DESCRIPTION: typing.Final[str] = """
 launch multi-step static code analysis
 """
 
+API_ANALYZE_AGENT_MODE_DESCRIPTION: typing.Final[str] = """
+use an LLM agent for adaptive query planning
+"""
+
 API_STATUS_JOB_ID_DESCRIPTION: typing.Final[str] = """
 launch multi-step static code analysis
 """
@@ -80,9 +84,10 @@ def create_handlers(
     async def _(
         request: fastapi.Request,
         job_id: str = fastapi.Query(..., description=API_ANALYZE_JOB_ID_DESCRIPTION),
+        agent_mode: bool = fastapi.Query(..., description=API_ANALYZE_AGENT_MODE_DESCRIPTION),
         _=fastapi.Depends(authentication.check)
     ):
-        return await analyze.run(coordinator, job_id)
+        return await analyze.run(coordinator, job_id, agent_mode)
 
     # argument request IS used ( for authentication check )
     @app.post(f'/api/{approved_url}/status')
