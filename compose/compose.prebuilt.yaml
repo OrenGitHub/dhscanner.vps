@@ -16,6 +16,6 @@ services:
       - dhscanner
   
   queryengine:
-    image: orenishdocker/dhscanner-queryengine:1.0.36-x64
+    image: orenishdocker/dhscanner-queryengine:1.0.37-x64
     networks:
       - dhscanner
