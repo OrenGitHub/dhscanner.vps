@@ -9,11 +9,12 @@ import logging
 
 import requests
 
+from argparse_wrapper import ExploreWithAgentArgparse as Argparse
+
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-from argparse_wrapper import ExploreWithAgentArgparse as Argparse
 
 QUERYENGINE_API_URL: typing.Final[str] = 'http://localhost:3000/api'
 
