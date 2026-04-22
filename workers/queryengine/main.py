@@ -143,6 +143,13 @@ class Queryengine(AbstractWorker):
     @typing.override
     async def mark_jobs_finished(self, job_ids: list[str]) -> None:
         for job_id in job_ids:
+            if self.the_coordinator.get_agent_mode(job_id):
+                self.the_coordinator.set_status(
+                    job_id,
+                    Status.Finished
+                )
+                continue
+
             if self.the_storage_guy.load_results_metadata_from_db(job_id) is None:
                 await self.the_logger_dude.info(
                     LogMessage(
