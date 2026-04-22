@@ -6,7 +6,6 @@ import http
 import math
 import json
 import time
-import socket
 import typing
 import pathlib
 import asyncio
@@ -15,39 +14,7 @@ import logging
 import aiofiles
 import aiohttp
 import requests
-import argparse
-import dataclasses
-
-from urllib.parse import urlparse
-
-ARGPARSE_PROG_DESC: typing.Final[str] = """
-
-simple dev script to send repo for dhscanner inspection
-"""
-
-ARGPARSE_SCAN_DIRNAME_HELP: typing.Final[str] = """
-relative / absolute path of the dir you want to scan
-"""
-
-ARGPARSE_IGNORE_TESTING_CODE_HELP: typing.Final[str] = """
-ignore testing code
-"""
-
-ARGPARSE_SHOW_PARSE_STATUS_FOR_FILE_HELP: typing.Final[str] = """
-print parse status for file
-"""
-
-ARGPARSE_SAVE_SARIF_OUTPUT_HELP: typing.Final[str] = """
-save the output in sarif format
-"""
-
-ARGPARSE_USE_EXTERNAL_VPS: typing.Final[str] = """
-connect to an external virtual private server
-"""
-
-ARGPARSE_WITH_AGENT: typing.Final[str] = """
-use an LLM agent for adaptive query planning
-"""
+from argparse_wrapper import CliArgparse as Argparse
 
 LOCALHOST: typing.Final[str] = 'http://localhost'
 PORT: typing.Final[int] = 8000
@@ -75,133 +42,6 @@ logging.basicConfig(
     datefmt="%d/%m/%Y ( %H:%M:%S )",
     stream=sys.stdout
 )
-
-def existing_non_empty_dirname(name: str) -> pathlib.Path:
-
-    candidate = pathlib.Path(name)
-
-    if not candidate.is_dir():
-        message = f'directory {name} does not exist'
-        raise argparse.ArgumentTypeError(message)
-
-    if not any(candidate.iterdir()):
-        message = f'no files found in directory: {name}'
-        raise argparse.ArgumentTypeError(message)
-
-    return candidate
-
-def proper_bool_value(name: str) -> bool:
-
-    if name not in ['true', 'false']:
-        message = 'please specify true | false for including testing code'
-        raise argparse.ArgumentTypeError(message)
-
-    return name == 'true'
-
-def valid_output_file(output: str) -> pathlib.Path:
-    candidate = pathlib.Path(output)
-
-    try:
-        with open(candidate, 'w', encoding='utf-8'):
-            pass
-    # pylint: disable=raise-missing-from
-    except IsADirectoryError:
-        raise argparse.ArgumentTypeError(f'{candidate} is not a file ( directory given )')
-    except PermissionError:
-        raise argparse.ArgumentTypeError(f'no write permission for: {candidate}')
-
-    return candidate
-
-def valid_external_vps(candidate: str) -> str:
-
-    if not candidate.startswith('https://'):
-        message = 'url must start with https://'
-        raise argparse.ArgumentTypeError(message)
-
-    url = urlparse(candidate)
-    hostname = url.hostname
-
-    if hostname is None:
-        message = f'missing host in {candidate}'
-        raise argparse.ArgumentTypeError(message)
-
-    try:
-        with socket.create_connection((hostname, HTTPS_PORT), timeout=2.0):
-            pass
-    except OSError:
-        message = f'unreachable: {hostname}'
-        # pylint: disable=raise-missing-from
-        raise argparse.ArgumentTypeError(message)
-
-    return candidate
-
-@dataclasses.dataclass(frozen=True, kw_only=True)
-class Argparse:
-
-    scan_dirname: pathlib.Path
-    ignore_testing_code: bool
-    save_sarif_to: typing.Optional[pathlib.Path]
-    use_external_vps: typing.Optional[str]
-    with_agent: bool
-
-    @staticmethod
-    def run() -> typing.Optional[Argparse]:
-
-        parser = argparse.ArgumentParser(
-            description=ARGPARSE_PROG_DESC
-        )
-
-        parser.add_argument(
-            '--scan_dirname',
-            required=True,
-            type=existing_non_empty_dirname,
-            metavar="dir/you/want/to/scan",
-            help=ARGPARSE_SCAN_DIRNAME_HELP
-        )
-
-        parser.add_argument(
-            '--ignore_testing_code',
-            required=True,
-            type=proper_bool_value,
-            metavar='true | false',
-            help=ARGPARSE_IGNORE_TESTING_CODE_HELP
-        )
-
-        parser.add_argument(
-            '--save_sarif_to',
-            required=False,
-            type=valid_output_file,
-            metavar='save/sarif/to/output.json',
-            help=ARGPARSE_SAVE_SARIF_OUTPUT_HELP
-        )
-
-        parser.add_argument(
-            '--use_external_vps',
-            required=False,
-            type=valid_external_vps,
-            metavar='https://dhscanner.org',
-            help=ARGPARSE_USE_EXTERNAL_VPS
-        )
-
-        parser.add_argument(
-            '--with_agent',
-            required=False,
-            default=False,
-            action='store_true',
-            help=ARGPARSE_WITH_AGENT
-        )
-
-        parsed_args = parser.parse_args()
-
-        logging.info('[ step 0 ] required args ok 😊')
-
-        return Argparse(
-            scan_dirname=parsed_args.scan_dirname,
-            ignore_testing_code=parsed_args.ignore_testing_code,
-            save_sarif_to=parsed_args.save_sarif_to,
-            use_external_vps=parsed_args.use_external_vps,
-            with_agent=parsed_args.with_agent
-        )
 
 # pylint: disable=too-many-return-statements
 def relevant(filename: pathlib.Path) -> bool:
@@ -755,8 +595,18 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                             logging.info('[ step 4 ] now %s', what_should_happen_next)
                             time.sleep(NUM_SECONDS_BETEEN_STEP_CHECK)
                         else:
-                            results = get_results(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
                             logging.info('[ step 5 ] finished 🙂')
+                            if parsed_args.with_agent:
+                                results = get_results(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
+                                kb_location = results.get('kb_location')
+                                if isinstance(kb_location, str):
+                                    logging.info('[ step 6 ] kb filename: %s', kb_location)
+                                    logging.info('[ step 6 ] copy this filename for agent mode continuation')
+                                else:
+                                    logging.warning('[ step 6 ] missing kb filename in results: %s', results)
+                                break
+
+                            results = get_results(job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
                             if output := parsed_args.save_sarif_to:
                                 logging.info('[ step 6 ] saved sarif to: %s', output)
                                 with open(output, 'w', encoding='utf-8') as fl:
@@ -767,6 +617,7 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
 if __name__ == "__main__":
     if args := Argparse.run():
+        logging.info('[ step 0 ] required args ok 😊')
         if APPROVED_URL_0 := os.getenv('APPROVED_URL_0', None):
             if APPROVED_BEARER_TOKEN_0 := os.getenv('APPROVED_BEARER_TOKEN_0', None):
                 main(args, APPROVED_URL_0, APPROVED_BEARER_TOKEN_0)
