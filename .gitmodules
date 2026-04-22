@@ -1,3 +1,6 @@
 [submodule "dhscanner"]
 	path = dhscanner
 	url = https://github.com/OrenGitHub/dhscanner.git
+[submodule "dhscanner.kbapi"]
+	path = dhscanner.kbapi
+	url = git@github.com:OrenGitHub/dhscanner.kbapi.git
