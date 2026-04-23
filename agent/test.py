@@ -110,6 +110,7 @@ def is_valid_location(location: typing.Any) -> bool:
     return True
 
 
+# pylint: disable=too-many-return-statements
 def valid_http_post_handler_request_object_response(response_json: dict[str, typing.Any]) -> bool:
     if response_json.get('tag') != 'FoundHttpPostHandlerRequestObject':
         logging.error('unexpected tag in response: %s', response_json.get('tag'))
