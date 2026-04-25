@@ -36,6 +36,14 @@ HTTP_POST_HANDLER_REQUEST_OBJECT_QUERY: typing.Final[dict[str, typing.Any]] = {
     },
 }
 
+HTTP_GET_HANDLER_REQUEST_OBJECT_QUERY: typing.Final[dict[str, typing.Any]] = {
+    'tag': 'HttpGetHandlerRequestObject',
+    'contents': {
+        'httpGetHandlerRequestObjectUrlParts': [],
+        'httpGetHandlerRequestObjectLimit': 5,
+    },
+}
+
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] [%(levelname)s]: %(message)s',
@@ -110,6 +118,20 @@ def is_valid_location(location: typing.Any) -> bool:
     return True
 
 
+def format_location(location: typing.Any, indent: str = '') -> str:
+    if not is_valid_location(location):
+        return f'{indent}<invalid location>'
+
+    lines = [
+        f"lineStart={location['lineStart']}",
+        f"colStart={location['colStart']}",
+        f"lineEnd={location['lineEnd']}",
+        f"colEnd={location['colEnd']}",
+        f"filename={location['filename']}",
+    ]
+    return '\n'.join(f'{indent}{line}' for line in lines)
+
+
 # pylint: disable=too-many-return-statements
 def valid_http_post_handler_request_object_response(response_json: dict[str, typing.Any]) -> bool:
     if response_json.get('tag') != 'FoundHttpPostHandlerRequestObject':
@@ -136,11 +158,11 @@ def valid_http_post_handler_request_object_response(response_json: dict[str, typ
             logging.error('match #%s is invalid: %s', i, match)
             return False
 
-        post_handler = match.get('foundHttpPostHandlerRequestObjectMatchPostHandler')
-        request = match.get('foundHttpPostHandlerRequestObjectMatchLocation')
+        post_handler = match.get('foundHttpPostHandlerLocation')
+        request = match.get('foundHttpPostHandlerRequestObjectLocation')
         url = match.get('foundHttpPostHandlerRequestObjectMatchUrl')
 
-        if post_handler is not None and not is_valid_location(post_handler):
+        if not is_valid_location(post_handler):
             logging.error('invalid post handler location in match #%s: %s', i, post_handler)
             return False
         if not is_valid_location(request):
@@ -170,16 +192,100 @@ def log_http_post_handler_request_object_preview(
     logging.info('[ test ] showing first %s matches:', min(preview_limit, len(matches)))
     for i, match in enumerate(matches[:preview_limit], start=1):
         url = match.get('foundHttpPostHandlerRequestObjectMatchUrl', '<missing url>')
-        post_handler = match.get('foundHttpPostHandlerRequestObjectMatchPostHandler', {})
-        request = match.get('foundHttpPostHandlerRequestObjectMatchLocation', {})
-        post_handler_file = post_handler.get('filename', '<missing in this kbapi version>')
-        request_file = request.get('filename', '<unknown file>')
+        post_handler = match.get('foundHttpPostHandlerLocation', {})
+        request = match.get('foundHttpPostHandlerRequestObjectLocation', {})
         logging.info(
-            '  #%s url=%s post_handler_file=%s request_file=%s',
+            '  #%s url=%s\n'
+            '     post_handler\n'
+            '%s\n'
+            '     request_object\n'
+            '%s',
             i,
             url,
-            post_handler_file,
-            request_file,
+            format_location(post_handler, indent='        '),
+            format_location(request, indent='        '),
+        )
+
+
+# pylint: disable=too-many-return-statements
+def valid_http_get_handler_request_object_response(response_json: dict[str, typing.Any]) -> bool:
+    tag = response_json.get('tag')
+    if tag != 'FoundHttpGetHandlerRequestObject':
+        if tag == 'FoundConstStringsMatching':
+            logging.error(
+                'HttpGetHandlerRequestObject query fell back to FoundConstStringsMatching. '
+                'The running queryengine likely does not include GET handler routing yet. '
+                'Rebuild/restart queryengine from the updated source.'
+            )
+        logging.error('unexpected tag in response: %s', tag)
+        return False
+
+    contents = response_json.get('contents')
+    if not isinstance(contents, dict):
+        logging.error('response contents is missing or invalid')
+        return False
+
+    total = contents.get('foundHttpGetHandlerRequestObjectTotal')
+    matches = contents.get('foundHttpGetHandlerRequestObjectMatches')
+
+    if not isinstance(total, int):
+        logging.error('invalid foundHttpGetHandlerRequestObjectTotal: %s', total)
+        return False
+    if not isinstance(matches, list):
+        logging.error('invalid foundHttpGetHandlerRequestObjectMatches: %s', matches)
+        return False
+
+    for i, match in enumerate(matches, start=1):
+        if not isinstance(match, dict):
+            logging.error('match #%s is invalid: %s', i, match)
+            return False
+
+        handler = match.get('foundHttpGetHandlerLocation')
+        request = match.get('foundHttpGetHandlerRequestObjectMatchLocation')
+        url = match.get('foundHttpGetHandlerRequestObjectMatchUrl')
+
+        if not is_valid_location(handler):
+            logging.error('invalid get handler location in match #%s: %s', i, handler)
+            return False
+        if not is_valid_location(request):
+            logging.error('invalid request location in match #%s: %s', i, request)
+            return False
+        if not isinstance(url, str):
+            logging.error('invalid url in match #%s: %s', i, url)
+            return False
+
+    return True
+
+
+def log_http_get_handler_request_object_preview(
+    response_json: dict[str, typing.Any],
+    preview_limit: int = 10,
+) -> None:
+    contents = response_json['contents']
+    total = contents['foundHttpGetHandlerRequestObjectTotal']
+    matches = contents['foundHttpGetHandlerRequestObjectMatches']
+
+    logging.info('[ test ] total get-handler request objects: %s', total)
+
+    if not matches:
+        logging.info('[ test ] no http get handler request objects matched')
+        return
+
+    logging.info('[ test ] showing first %s matches:', min(preview_limit, len(matches)))
+    for i, match in enumerate(matches[:preview_limit], start=1):
+        url = match.get('foundHttpGetHandlerRequestObjectMatchUrl', '<missing url>')
+        handler = match.get('foundHttpGetHandlerLocation', {})
+        request = match.get('foundHttpGetHandlerRequestObjectMatchLocation', {})
+        logging.info(
+            '  #%s url=%s\n'
+            '     handler\n'
+            '%s\n'
+            '     request_object\n'
+            '%s',
+            i,
+            url,
+            format_location(handler, indent='        '),
+            format_location(request, indent='        '),
         )
 
 
@@ -228,11 +334,21 @@ def main(parsed_args: Argparse) -> int:
 
     log_http_post_handler_request_object_preview(post_handler_response)
 
+    logging.info('[ test ] sending HttpGetHandlerRequestObject query')
+    if not (get_handler_response := run_query(parsed_args.use_kb, HTTP_GET_HANDLER_REQUEST_OBJECT_QUERY)):
+        return 1
+
+    if not valid_http_get_handler_request_object_response(get_handler_response):
+        return 1
+
+    log_http_get_handler_request_object_preview(get_handler_response)
+
     with parsed_args.save_sarif_to.open('w', encoding='utf-8') as fl:
         json.dump(
             {
                 'constStringsMatching': const_strings_response,
                 'httpPostHandlerRequestObject': post_handler_response,
+                'httpGetHandlerRequestObject': get_handler_response,
             },
             fl,
         )
