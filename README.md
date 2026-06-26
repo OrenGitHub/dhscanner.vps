@@ -22,3 +22,24 @@ $ pipenv install
 # start scanning 🙂
 $ python ./cli.py --scan_dirname repo/you/want/to/scan --ignore_testing_code true
 ```
+
+## operator commands
+
+Read-only listing and full wipes for the jobs the server still knows about.
+All three flags talk to the same server you scan against (add
+`--use_external_vps https://...` for a remote vps).
+
+```bash
+# list every job id still tracked by redis (one per line, greppable)
+$ python ./cli.py --get-all-job-ids
+
+# wipe one job: redis + sqlite + shared volume + postgres logger rows
+$ python ./cli.py --clear-job-id <job_id>
+
+# wipe every job (same scope as above, applied to all jobs)
+$ python ./cli.py --clear-all
+```
+
+The three are mutually exclusive and skip `--scan_dirname` /
+`--ignore_testing_code`. Third-party trees (`vendor`, `node_modules`,
+`site_packages`) are pruned automatically during scan-mode collection.

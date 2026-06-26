@@ -68,6 +68,50 @@ def create_handlers(
     ):
         return {'job_id': secrets.token_hex(16)}
 
+    # Operator helper: list every job id Redis still knows about, so the
+    # caller can cross-reference by prefix/suffix for cleanup, log queries,
+    # etc. Cheap (single KEYS *) and rate-limited the same as getjobid.
+    # argument request IS used ( for authentication check )
+    @app.get(f'/api/{approved_url}/jobids')
+    @limiter.limit('100/minute')
+    async def _(
+        request: fastapi.Request,
+        _=fastapi.Depends(authentication.check)
+    ):
+        return {'job_ids': await coordinator.list_all_job_ids()}
+
+    # Operator helper: wipe one job from every store it touches --
+    # Redis status + sidecars, SQLite per-table rows, the shared-volume
+    # directory, AND the postgres logger `logs` rows. The wipe is
+    # complete by design so the operator's mental model ("the job is
+    # gone") matches every backing store.
+    # argument request IS used ( for authentication check )
+    @app.delete(f'/api/{approved_url}/jobs/{{job_id}}')
+    @limiter.limit('100/minute')
+    async def _(
+        request: fastapi.Request,
+        job_id: str,
+        _=fastapi.Depends(authentication.check)
+    ):
+        await coordinator.clear_job(job_id)
+        await storage.clear_job_state(job_id)
+        await logger.delete_for_job(job_id)
+        return {'cleared': job_id}
+
+    # Operator helper: nuke ALL jobs in one call, logs included. Caller
+    # is responsible for confirming intent client-side (CLI flag itself).
+    # argument request IS used ( for authentication check )
+    @app.delete(f'/api/{approved_url}/jobs')
+    @limiter.limit('10/minute')
+    async def _(
+        request: fastapi.Request,
+        _=fastapi.Depends(authentication.check)
+    ):
+        cleared = await coordinator.clear_all_jobs()
+        await storage.clear_all_job_state()
+        await logger.delete_all()
+        return {'cleared': cleared}
+
     @app.post(f'/api/{approved_url}/upload')
     async def _(
         request: fastapi.Request,

@@ -22,7 +22,6 @@ AST_BUILDER_URL = {
     Language.RB: 'http://frontrb:3000/to/native/cruby/ast',
     Language.CS: 'http://frontcs:8080/to/native/cs/ast',
     Language.GO: 'http://frontgo:8080/to/native/go/ast',
-    Language.BLADE_PHP: 'http://frontphp:5000/to/php/code'
 }
 
 @dataclasses.dataclass(frozen=True)
@@ -63,6 +62,15 @@ class NativeParser(AbstractWorker):
         f: FileMetadata
     ) -> typing.Optional[str]:
         start = time.monotonic()
+
+        # YAML / YML have no separate native-parser front. HsYAML inside the
+        # dhscanner parsers service does the real structural parsing later,
+        # so the "native ast" here is just the raw source text. Skipping the
+        # HTTP roundtrip keeps the surrounding save_native_ast / delete_file
+        # flow uniform without inventing a placeholder front-end.
+        if f.language in (Language.YAML, Language.YML):
+            return code['source'][1].decode('utf-8', errors='replace')
+
         url = AST_BUILDER_URL[f.language]
         try:
             form = aiohttp.FormData()
@@ -74,7 +82,13 @@ class NativeParser(AbstractWorker):
             )
             async with session.post(url, data=form) as response:
                 if response.status == http.HTTPStatus.OK:
-                    native_ast = await response.text()
+                    # `errors='replace'` so a single non-utf-8 byte from a
+                    # native front-end can't take the whole worker down via
+                    # an unhandled UnicodeDecodeError (a single bad file will
+                    # at worst fail dhscanner-parsing later in a structured
+                    # way, instead of crashing the asyncio.gather and exiting
+                    # the entrypoint).
+                    native_ast = await response.text(errors='replace')
                     context = Context.NATIVE_PARSING_SUCCEEDED
                     received_native_ast_is_empty = (len(native_ast) == 0)
                     if received_native_ast_is_empty:
@@ -97,7 +111,11 @@ class NativeParser(AbstractWorker):
 
                     return native_ast
 
-        except aiohttp.ClientError:
+        # `UnicodeDecodeError` is a defensive catch even though `text(errors=
+        # 'replace')` above shouldn't raise it -- if a future aiohttp change
+        # or a different read path re-introduces the issue, we still log the
+        # file as NATIVE_PARSING_FAILED instead of toppling the worker.
+        except (aiohttp.ClientError, UnicodeDecodeError):
             pass
 
         end = time.monotonic()

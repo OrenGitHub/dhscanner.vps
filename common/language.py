@@ -14,7 +14,8 @@ class Language(str, enum.Enum):
     RB = 'rb'
     CS = 'cs'
     GO = 'go'
-    BLADE_PHP = 'blade.php'
+    YAML = 'yaml'
+    YML = 'yml'
     ALL = 'ALL'
     UNKNOWN = 'UNKNOWN'
 

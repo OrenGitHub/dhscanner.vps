@@ -15,12 +15,21 @@ import aiofiles
 import aiohttp
 import requests
 from argparse_wrapper import CliArgparse as Argparse
+import cli_logger
 
 LOCALHOST: typing.Final[str] = 'http://localhost'
 PORT: typing.Final[int] = 8000
 
 SUFFIXES: typing.Final[set[str]] = {
-    'py', 'ts', 'js', 'php', 'rb', 'java', 'cs', 'go'   
+    'py', 'ts', 'js', 'php', 'rb', 'java', 'cs', 'go', 'yaml', 'yml'
+}
+
+# Third-party dependency trees — skip entirely during collection.
+IGNORED_3RD_PARTY_DIRS: typing.Final[set[str]] = {
+    'vendor',
+    'node_modules',
+    'site_packages',
+    'site-packages',
 }
 
 MAX_ATTEMPTS_CONNECTING_TO_SERVER = 10
@@ -36,12 +45,11 @@ LEN_DOT_GIT_SUFFIX: typing.Final[int] = len(DOT_GIT_SUFFIX)
 GIT_AT_PREFIX: typing.Final[str] = 'git@'
 LEN_GIT_AT_PREFIX: typing.Final[int] = len(GIT_AT_PREFIX)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s]: %(message)s",
-    datefmt="%d/%m/%Y ( %H:%M:%S )",
-    stream=sys.stdout
-)
+# Install the colorized DEBUG-level stdout handler. DEBUG-default is
+# intentional: the upload loop demotes its high-frequency progress lines
+# to DEBUG and relies on the cyan-tinted level name to fade them out
+# visually rather than filtering them out entirely.
+cli_logger.configure()
 
 # pylint: disable=too-many-return-statements
 def relevant(filename: pathlib.Path) -> bool:
@@ -53,6 +61,9 @@ def relevant(filename: pathlib.Path) -> bool:
 
     resolved = filename.resolve()
     parts = resolved.parts
+    if IGNORED_3RD_PARTY_DIRS.intersection(parts):
+        return False
+
     name = str(resolved)
     if 'test' in parts:
         return False
@@ -71,7 +82,8 @@ def relevant(filename: pathlib.Path) -> bool:
 def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
 
     filenames = []
-    for root, _, files in os.walk(scan_dirname):
+    for root, dirs, files in os.walk(scan_dirname):
+        dirs[:] = [d for d in dirs if d not in IGNORED_3RD_PARTY_DIRS]
         for filename in files:
             abspath_filename = pathlib.Path(root) / filename
             if relevant(abspath_filename):
@@ -436,7 +448,6 @@ async def upload(
     n = len(files)
     percent = '%'
     batches = math.ceil(n / UPLOAD_BATCH_SIZE)
-    percentage_for_1_batch = math.floor(100 / batches)
     for i in range(batches):
         start = i * UPLOAD_BATCH_SIZE
         end = (i + 1) * UPLOAD_BATCH_SIZE
@@ -452,8 +463,18 @@ async def upload(
                     parsed_args
                 )
             )
-        overall_percentage = min(100, (i + 1) * percentage_for_1_batch)
-        logging.info('[ step 3 ] uploaded %s%s', overall_percentage, percent)
+        # Multiply before dividing so the percentage doesn't get floored to
+        # 0 when batches > 100 (e.g. 10258 files -> 103 batches, where
+        # math.floor(100 / 103) == 0 used to make every log line read "0%").
+        overall_percentage = min(100, math.floor((i + 1) * 100 / batches))
+        # Visibility tweak: surface only round-decile progress at INFO so
+        # the human eye gets ~11 anchor lines for any job size; the dense
+        # in-between batches go to DEBUG (cyan in the colorized formatter)
+        # so they're still scrollable but don't drown the rest of the log.
+        if overall_percentage % 10 == 0:
+            logging.info('[ step 3 ] uploaded %s%s', overall_percentage, percent)
+        else:
+            logging.debug('[ step 3 ] uploaded %s%s', overall_percentage, percent)
 
     return all(results)
 
@@ -521,6 +542,110 @@ def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, pars
     logging.warning('received unknown status (%s)', response.status_code)
     return {}
 
+def list_all_job_ids_url(APPROVED_URL: str, parsed_args: Argparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/jobids'
+
+def do_get_all_job_ids(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: Argparse) -> None:
+    # Operator-mode entry point: list every job id Redis still knows
+    # about so the human can grep/cleanup/cross-ref-against-logs. We
+    # reuse the same bearer-token + approved-url plumbing as every other
+    # endpoint, so the server-side rate limit and auth apply uniformly.
+    url = list_all_job_ids_url(APPROVED_URL, parsed_args)
+    headers = just_authroization_header(BEARER_TOKEN)
+    try:
+        response = requests.get(url, headers=headers)
+    except requests.exceptions.ConnectionError:
+        logging.warning('[ jobids ] failed to reach %s', url)
+        return
+
+    if response.status_code != http.HTTPStatus.OK:
+        logging.warning('[ jobids ] http %s from server', response.status_code)
+        return
+
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        logging.warning('[ jobids ] invalid json response')
+        return
+
+    job_ids = payload.get('job_ids')
+    if not isinstance(job_ids, list):
+        logging.warning('[ jobids ] missing/invalid job_ids key in: %s', payload)
+        return
+
+    if not job_ids:
+        logging.info('[ jobids ] no jobs found')
+        return
+
+    logging.info('[ jobids ] %d job(s):', len(job_ids))
+    # Plain stdout (not via logging) so the output is greppable and
+    # pipe-able without timestamps/level decorations contaminating each
+    # line (e.g. `python cli.py --get-all-job-ids | grep ^abc`).
+    for job_id in job_ids:
+        print(job_id)
+
+def clear_job_url(APPROVED_URL: str, job_id: str, parsed_args: Argparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/jobs/{job_id}'
+
+def clear_all_url(APPROVED_URL: str, parsed_args: Argparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/jobs'
+
+def do_clear_job_id(
+    job_id: str,
+    APPROVED_URL: str,
+    BEARER_TOKEN: str,
+    parsed_args: Argparse,
+) -> None:
+    # Operator-mode entry point: ask the server to evict one job from
+    # every runtime store (Redis + SQLite + shared volume + PG logs).
+    # This CLI just relays whatever the server reports back.
+    url = clear_job_url(APPROVED_URL, job_id, parsed_args)
+    headers = just_authroization_header(BEARER_TOKEN)
+    try:
+        response = requests.delete(url, headers=headers)
+    except requests.exceptions.ConnectionError:
+        logging.warning('[ clear ] failed to reach %s', url)
+        return
+
+    if response.status_code != http.HTTPStatus.OK:
+        logging.warning('[ clear ] http %s from server', response.status_code)
+        return
+
+    logging.info('[ clear ] job %s cleared (pg logs included)', job_id)
+
+def do_clear_all(
+    APPROVED_URL: str,
+    BEARER_TOKEN: str,
+    parsed_args: Argparse,
+) -> None:
+    # Bulk operator-mode wipe. No client-side confirmation prompt: the
+    # opt-in is the flag itself, and the CLI is meant to be scriptable
+    # (a TTY-only prompt would silently get skipped in CI anyway).
+    url = clear_all_url(APPROVED_URL, parsed_args)
+    headers = just_authroization_header(BEARER_TOKEN)
+    try:
+        response = requests.delete(url, headers=headers)
+    except requests.exceptions.ConnectionError:
+        logging.warning('[ clear ] failed to reach %s', url)
+        return
+
+    if response.status_code != http.HTTPStatus.OK:
+        logging.warning('[ clear ] http %s from server', response.status_code)
+        return
+
+    try:
+        payload = response.json()
+        cleared = payload.get('cleared', '?')
+    except json.JSONDecodeError:
+        cleared = '?'
+    logging.info('[ clear ] %s job(s) cleared (pg logs included)', cleared)
+
 def try_connecting_to_server_and_allocate_a_job_id(
     APPROVED_URL: str,
     BEARER_TOKEN: str,
@@ -576,6 +701,21 @@ def remove_loops(sarif: dict) -> dict:
     return sarif
 
 def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+
+    # Operator-mode short-circuits: skip everything scan-related (job-id
+    # allocation, file collection, upload, analyze, poll). The argparse
+    # layer enforces mutual exclusion between these three and also lets
+    # the scan-only flags stay unset, so we just dispatch on whichever
+    # one is active.
+    if parsed_args.get_all_job_ids:
+        do_get_all_job_ids(APPROVED_URL, BEARER_TOKEN, parsed_args)
+        return
+    if parsed_args.clear_job_id is not None:
+        do_clear_job_id(parsed_args.clear_job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
+        return
+    if parsed_args.clear_all:
+        do_clear_all(APPROVED_URL, BEARER_TOKEN, parsed_args)
+        return
 
     if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN, parsed_args):
         if files := collect_relevant_files(parsed_args.scan_dirname):

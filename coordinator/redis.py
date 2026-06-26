@@ -82,6 +82,90 @@ class RedisCoordinator(interface.Coordinator):
 
         return job_ids
 
+    @typing.override
+    async def clear_job(self, job_id: str) -> None:
+        # Wipe every Redis trace of one job: the status key, plus the two
+        # sidecar keys (agent_mode / kb_location) created lazily during
+        # the analyze flow. DEL is idempotent and missing-key tolerant,
+        # so this is safe to call repeatedly even when sidecars never
+        # came into existence (e.g. a job that died before /analyze).
+        try:
+            self.redis_client.delete(
+                job_id,
+                self.get_agent_mode_key(job_id),
+                f'{job_id}:kb_location',
+            )
+        except redis.exceptions.RedisError:
+            await self.logger.warning(
+                LogMessage(
+                    file_unique_id='*',
+                    job_id=job_id,
+                    context=Context.COORDINATOR_NOT_RESPONDING,
+                    original_filename='*',
+                    language=Language.UNKNOWN,
+                    duration=timedelta(0)
+                )
+            )
+
+    @typing.override
+    async def clear_all_jobs(self) -> int:
+        # FLUSHDB-equivalent but scoped to job-shaped keys, so any future
+        # tenant of this redis (e.g. caches that grow next to the queue)
+        # stays untouched. We discover top-level job ids the same way
+        # `list_all_job_ids` does and then delegate per-id deletion to
+        # `clear_job` so the sidecar-key rules live in exactly one place.
+        try:
+            keys = self.redis_client.keys('*')
+        except redis.exceptions.RedisError:
+            await self.logger.warning(
+                LogMessage(
+                    file_unique_id='*',
+                    job_id='*',
+                    context=Context.COORDINATOR_NOT_RESPONDING,
+                    original_filename='*',
+                    language=Language.UNKNOWN,
+                    duration=timedelta(0)
+                )
+            )
+            return 0
+
+        job_ids = [k.decode('utf-8') for k in keys if ':' not in k.decode('utf-8')]
+        for job_id in job_ids:
+            await self.clear_job(job_id)
+        return len(job_ids)
+
+    @typing.override
+    async def list_all_job_ids(self) -> list[str]:
+        # Redis is the source of truth for "a job exists": every job-id is
+        # set as a top-level key whose value is the status JSON. Sidecar
+        # state (agent_mode / kb_location) lives under composite keys like
+        # `<job_id>:agent_mode`, which we filter out by rejecting anything
+        # with a colon so this endpoint only returns the bare job IDs.
+        try:
+            keys = self.redis_client.keys('*')
+        except redis.exceptions.RedisError:
+            await self.logger.warning(
+                LogMessage(
+                    file_unique_id='*',
+                    job_id='*',
+                    context=Context.COORDINATOR_NOT_RESPONDING,
+                    original_filename='*',
+                    language=Language.UNKNOWN,
+                    duration=timedelta(0)
+                )
+            )
+            return []
+
+        job_ids: list[str] = []
+        for key in keys:
+            decoded = key.decode('utf-8')
+            if ':' in decoded:
+                continue
+            job_ids.append(decoded)
+
+        job_ids.sort()
+        return job_ids
+
     def get_status_bytes(self, job_id: str) -> typing.Optional[bytes]:
         return self.redis_client.get(job_id)
 
