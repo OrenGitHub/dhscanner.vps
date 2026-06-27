@@ -5,6 +5,8 @@ import psycopg2
 import contextlib
 import sqlalchemy
 
+from sqlalchemy.engine import CursorResult
+
 from logger import db
 from logger import models
 
@@ -63,11 +65,15 @@ def delete_logs_for_job(job_id: str) -> dict:
     # (keeping orphaned log rows around would defeat the operator's
     # mental model of "the job is gone").
     with db.SessionLocal() as session:
-        result = session.execute(
+        # Session.execute() is typed as returning the base Result[Any],
+        # but for DML statements (DELETE/UPDATE/INSERT) the actual
+        # runtime object is a CursorResult, which is where `rowcount`
+        # lives. Cast once so the attribute access is statically valid.
+        result = typing.cast(CursorResult, session.execute(
             sqlalchemy.delete(models.LogMessage).where(
                 models.LogMessage.job_id == job_id
             )
-        )
+        ))
         session.commit()
         return {'deleted': result.rowcount or 0}
 
@@ -77,6 +83,8 @@ def delete_all_logs() -> dict:
     # so it stays inside SQLAlchemy's ORM-friendly path and respects
     # whatever connection-level isolation the surrounding session has.
     with db.SessionLocal() as session:
-        result = session.execute(sqlalchemy.delete(models.LogMessage))
+        # Same Result -> CursorResult cast as in delete_logs_for_job;
+        # see that function for why rowcount needs the narrower type.
+        result = typing.cast(CursorResult, session.execute(sqlalchemy.delete(models.LogMessage)))
         session.commit()
         return {'deleted': result.rowcount or 0}

@@ -219,7 +219,7 @@ class LocalStorage(interface.Storage):
         delta = end - start
         await self.logger.warning(
             LogMessage(
-                file_unique_id=a.file_unique_id,
+                file_unique_id=a.native_ast_unique_id,
                 job_id=a.job_id,
                 context=Context.READ_NATIVE_AST_FILE_FAILED,
                 original_filename=a.original_filename,

@@ -26,6 +26,19 @@ class RedisCoordinator(interface.Coordinator):
             port=self.port
         ))
 
+    # The redis-py type stubs unify every possible return shape
+    # (sync/async, decoded/raw, scalar/sequence) into one wide union
+    # roughly equal to `Awaitable[Any] | bytes | str | ...`. Since we
+    # always construct a synchronous client without decode_responses=True,
+    # the actual runtime values are `bytes` and `list[bytes]`. We pin
+    # that fact in exactly one place via these wrappers so every call
+    # site can stay readable and properly typed.
+    def _client_get_bytes(self, key: str) -> typing.Optional[bytes]:
+        return typing.cast(typing.Optional[bytes], self.redis_client.get(key))
+
+    def _client_keys_bytes(self, pattern: str) -> list[bytes]:
+        return typing.cast(list[bytes], self.redis_client.keys(pattern))
+
     @typing.override
     def get_status(self, job_id: str) -> typing.Optional[interface.Status]:
         if raw_bytes := self.get_status_bytes(job_id):
@@ -46,7 +59,7 @@ class RedisCoordinator(interface.Coordinator):
     @typing.override
     def get_agent_mode(self, job_id: str) -> bool:
         key = self.get_agent_mode_key(job_id)
-        if raw_bytes := self.redis_client.get(key):
+        if raw_bytes := self._client_get_bytes(key):
             return raw_bytes.decode('utf-8') == 'True'
         return False
 
@@ -59,7 +72,7 @@ class RedisCoordinator(interface.Coordinator):
     async def get_jobs_waiting_for(self, desired_status: interface.Status) -> list[str]:
 
         try:
-            keys = self.redis_client.keys('*')
+            keys = self._client_keys_bytes('*')
         except redis.exceptions.RedisError:
             await self.logger.warning(
                 LogMessage(
@@ -115,7 +128,7 @@ class RedisCoordinator(interface.Coordinator):
         # `list_all_job_ids` does and then delegate per-id deletion to
         # `clear_job` so the sidecar-key rules live in exactly one place.
         try:
-            keys = self.redis_client.keys('*')
+            keys = self._client_keys_bytes('*')
         except redis.exceptions.RedisError:
             await self.logger.warning(
                 LogMessage(
@@ -142,7 +155,7 @@ class RedisCoordinator(interface.Coordinator):
         # `<job_id>:agent_mode`, which we filter out by rejecting anything
         # with a colon so this endpoint only returns the bare job IDs.
         try:
-            keys = self.redis_client.keys('*')
+            keys = self._client_keys_bytes('*')
         except redis.exceptions.RedisError:
             await self.logger.warning(
                 LogMessage(
@@ -167,7 +180,7 @@ class RedisCoordinator(interface.Coordinator):
         return job_ids
 
     def get_status_bytes(self, job_id: str) -> typing.Optional[bytes]:
-        return self.redis_client.get(job_id)
+        return self._client_get_bytes(job_id)
 
     def get_status_string(self, raw_bytes: bytes) -> typing.Optional[str]:
         try:
@@ -183,7 +196,7 @@ class RedisCoordinator(interface.Coordinator):
 
     @typing.override
     def get_kb_location(self, job_id: str) -> typing.Optional[str]:
-        if raw_bytes := self.redis_client.get(f'{job_id}:kb_location'):
+        if raw_bytes := self._client_get_bytes(f'{job_id}:kb_location'):
             return raw_bytes.decode('utf-8')
         return None
 
