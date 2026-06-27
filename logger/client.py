@@ -10,6 +10,7 @@ from logger.models import Level, LogMessage
 MAX_RETRIES: typing.Final[int] = 3
 RETRY_DELAY: typing.Final[float] = 0.5
 LOGGER_URL:typing.Final[str] = 'http://logger_server:8000/log'
+LOGGER_BASE_URL: typing.Final[str] = 'http://logger_server:8000'
 
 class Logger:
 
@@ -48,3 +49,28 @@ class Logger:
     @staticmethod
     async def debug(message: LogMessage):
         await Logger.send(message, Level.DEBUG)
+
+    @staticmethod
+    async def delete_for_job(job_id: str) -> bool:
+        # Operator-only: wipe every PG `logs` row that references this
+        # job. Surfaces errors as a boolean (mirrors `send_attempt`) so
+        # the caller can decide whether to flag a partial wipe to the
+        # human without raising across the FastAPI handler boundary.
+        url = f'{LOGGER_BASE_URL}/log/{job_id}'
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.delete(url) as response:
+                    return response.status == http.HTTPStatus.OK
+        except aiohttp.ClientError:
+            return False
+
+    @staticmethod
+    async def delete_all() -> bool:
+        # Bulk wipe, paired with `--clear-all` on the CLI side.
+        url = f'{LOGGER_BASE_URL}/log'
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.delete(url) as response:
+                    return response.status == http.HTTPStatus.OK
+        except aiohttp.ClientError:
+            return False

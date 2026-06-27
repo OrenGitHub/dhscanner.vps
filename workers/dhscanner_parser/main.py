@@ -30,6 +30,8 @@ DHSCANNER_AST_BUILDER_URL = {
     Language.RB: 'http://parsers:3000/from/rb/to/dhscanner/ast',
     Language.CS: 'http://parsers:3000/from/cs/to/dhscanner/ast',
     Language.GO: 'http://parsers:3000/from/go/to/dhscanner/ast',
+    Language.YAML: 'http://parsers:3000/from/yaml/to/dhscanner/ast',
+    Language.YML: 'http://parsers:3000/from/yaml/to/dhscanner/ast',
 }
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -116,7 +118,11 @@ class DhscannerParser(AbstractWorker):
         try:
             payload = {
                 'filename': code['source'][0],
-                'content': code['source'][1].decode('utf-8'),
+                # `errors='replace'` so a non-utf-8 byte in the stored
+                # native AST can't crash the whole worker via an unhandled
+                # UnicodeDecodeError. See the matching note in
+                # workers/native_parser/main.py.
+                'content': code['source'][1].decode('utf-8', errors='replace'),
                 'optional_github_url': github_url,
                 'source_containing_dirs': directories,
                 'all_filenames': filenames,
@@ -158,6 +164,14 @@ class DhscannerParser(AbstractWorker):
             pass
 
         except json.JSONDecodeError:
+            pass
+
+        # Defensive: `response.json()` ultimately decodes utf-8 internally;
+        # any non-utf-8 byte in the parsers-service response would otherwise
+        # surface as an unhandled UnicodeDecodeError and topple the worker.
+        # Logging a single file as DHSCANNER_PARSING_SYSTEM_FAILURE is the
+        # right outcome instead.
+        except UnicodeDecodeError:
             pass
 
         end = time.monotonic()

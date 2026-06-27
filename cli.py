@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 import http
 import math
 import json
@@ -9,18 +8,28 @@ import time
 import typing
 import pathlib
 import asyncio
+import functools
 import subprocess
 import logging
 import aiofiles
 import aiohttp
 import requests
-from argparse_wrapper import CliArgparse as Argparse
+from argparse_wrapper import CliArgparse, CliRunArgparse, CliManageArgparse
+import cli_logger
 
 LOCALHOST: typing.Final[str] = 'http://localhost'
 PORT: typing.Final[int] = 8000
 
 SUFFIXES: typing.Final[set[str]] = {
-    'py', 'ts', 'js', 'php', 'rb', 'java', 'cs', 'go'   
+    'py', 'ts', 'js', 'php', 'rb', 'java', 'cs', 'go', 'yaml', 'yml'
+}
+
+# Third-party dependency trees — skip entirely during collection.
+IGNORED_3RD_PARTY_DIRS: typing.Final[set[str]] = {
+    'vendor',
+    'node_modules',
+    'site_packages',
+    'site-packages',
 }
 
 MAX_ATTEMPTS_CONNECTING_TO_SERVER = 10
@@ -36,12 +45,11 @@ LEN_DOT_GIT_SUFFIX: typing.Final[int] = len(DOT_GIT_SUFFIX)
 GIT_AT_PREFIX: typing.Final[str] = 'git@'
 LEN_GIT_AT_PREFIX: typing.Final[int] = len(GIT_AT_PREFIX)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s]: %(message)s",
-    datefmt="%d/%m/%Y ( %H:%M:%S )",
-    stream=sys.stdout
-)
+# Install the colorized DEBUG-level stdout handler. DEBUG-default is
+# intentional: the upload loop demotes its high-frequency progress lines
+# to DEBUG and relies on the cyan-tinted level name to fade them out
+# visually rather than filtering them out entirely.
+cli_logger.configure()
 
 # pylint: disable=too-many-return-statements
 def relevant(filename: pathlib.Path) -> bool:
@@ -53,6 +61,9 @@ def relevant(filename: pathlib.Path) -> bool:
 
     resolved = filename.resolve()
     parts = resolved.parts
+    if IGNORED_3RD_PARTY_DIRS.intersection(parts):
+        return False
+
     name = str(resolved)
     if 'test' in parts:
         return False
@@ -71,7 +82,8 @@ def relevant(filename: pathlib.Path) -> bool:
 def collect_relevant_files(scan_dirname: pathlib.Path) -> list[pathlib.Path]:
 
     filenames = []
-    for root, _, files in os.walk(scan_dirname):
+    for root, dirs, files in os.walk(scan_dirname):
+        dirs[:] = [d for d in dirs if d not in IGNORED_3RD_PARTY_DIRS]
         for filename in files:
             abspath_filename = pathlib.Path(root) / filename
             if relevant(abspath_filename):
@@ -234,7 +246,7 @@ def resolve_file_mappings(
 
     return result
 
-def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: Argparse) -> typing.Optional[str]:
+def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: CliArgparse) -> typing.Optional[str]:
     headers = {'Authorization': f'Bearer {BEARER_TOKEN}'}
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
     port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
@@ -254,7 +266,7 @@ def create_job_id(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: Argparse) -
 
     return None
 
-def upload_url(APPROVED_URL: str, parsed_args: Argparse) -> str:
+def upload_url(APPROVED_URL: str, parsed_args: CliArgparse) -> str:
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
     port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
     return f'{host}:{port}/api/{APPROVED_URL}/upload'
@@ -335,7 +347,7 @@ async def upload_single_file(
     gomod: typing.Optional[str],
     github_url: typing.Optional[str],
     path_mappings: typing.Optional[str],
-    parsed_args: Argparse
+    parsed_args: CliArgparse
 ) -> bool:
 
     params = {'job_id': job_id}
@@ -395,7 +407,7 @@ def create_upload_tasks(
     files: list[pathlib.Path],
     APPROVED_URL: str,
     BEARER_TOKEN: str,
-    parsed_args: Argparse
+    parsed_args: CliArgparse
 ) -> list:
 
     module_name: typing.Optional[str] = None
@@ -430,13 +442,12 @@ async def upload(
     job_id: str,
     APPROVED_URL: str,
     BEARER_TOKEN: str,
-    parsed_args: Argparse
+    parsed_args: CliArgparse
 ) -> bool:
 
     n = len(files)
     percent = '%'
     batches = math.ceil(n / UPLOAD_BATCH_SIZE)
-    percentage_for_1_batch = math.floor(100 / batches)
     for i in range(batches):
         start = i * UPLOAD_BATCH_SIZE
         end = (i + 1) * UPLOAD_BATCH_SIZE
@@ -452,17 +463,30 @@ async def upload(
                     parsed_args
                 )
             )
-        overall_percentage = min(100, (i + 1) * percentage_for_1_batch)
-        logging.info('[ step 3 ] uploaded %s%s', overall_percentage, percent)
+        # Multiply before dividing so the percentage doesn't get floored to
+        # 0 when batches > 100 (e.g. 10258 files -> 103 batches, where
+        # math.floor(100 / 103) == 0 used to make every log line read "0%").
+        overall_percentage = min(100, math.floor((i + 1) * 100 / batches))
+        # Visibility tweak: surface only round-decile progress at INFO so
+        # the human eye gets ~11 anchor lines for any job size; the dense
+        # in-between batches go to DEBUG (cyan in the colorized formatter)
+        # so they're still scrollable but don't drown the rest of the log.
+        if overall_percentage % 10 == 0:
+            logging.info('[ step 3 ] uploaded %s%s', overall_percentage, percent)
+        else:
+            logging.debug('[ step 3 ] uploaded %s%s', overall_percentage, percent)
 
     return all(results)
 
-def analyze_url(APPROVED_URL: str, parsed_args: Argparse) -> str:
+def analyze_url(APPROVED_URL: str, parsed_args: CliArgparse) -> str:
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
     port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
     return f'{host}:{port}/api/{APPROVED_URL}/analyze'
 
-def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse, directories: list[str], filenames: list[str]) -> bool:
+# `analyze` is run-mode-only: it reads parsed_args.with_agent. Typing
+# against CliRunArgparse keeps that access mypy-safe and stops it from
+# being accidentally called from main_manage in the future.
+def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: CliRunArgparse, directories: list[str], filenames: list[str]) -> bool:
     params = {'job_id': job_id, 'agent_mode': str(parsed_args.with_agent).lower()}
     url = analyze_url(APPROVED_URL, parsed_args)
     headers = analyze_headers(APPROVED_BEARER_TOKEN)
@@ -470,12 +494,12 @@ def analyze(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_a
     with requests.post(url, params=params, headers=headers, json=body) as response:
         return response.status_code == http.HTTPStatus.OK
 
-def status_url(APPROVED_URL, parsed_args: Argparse) -> str:
+def status_url(APPROVED_URL, parsed_args: CliArgparse) -> str:
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
     port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
     return f'{host}:{port}/api/{APPROVED_URL}/status'
 
-def check(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse) -> str:
+def check(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: CliArgparse) -> str:
     params = {'job_id': job_id}
     url = status_url(APPROVED_URL, parsed_args)
     headers = status_headers(APPROVED_BEARER_TOKEN)
@@ -492,7 +516,7 @@ def check(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_arg
 
         return 'invalid status response'
 
-def results_url(APPROVED_URL, parsed_args: Argparse) -> str:
+def results_url(APPROVED_URL, parsed_args: CliArgparse) -> str:
     host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
     port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
     return f'{host}:{port}/api/{APPROVED_URL}/results'
@@ -500,7 +524,7 @@ def results_url(APPROVED_URL, parsed_args: Argparse) -> str:
 def results_headers(BEARER_TOKEN: str) -> dict:
     return just_authroization_header(BEARER_TOKEN)
 
-def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: Argparse) -> dict:
+def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, parsed_args: CliArgparse) -> dict:
     params = {'job_id': job_id}
     url = results_url(APPROVED_URL, parsed_args)
     headers = results_headers(APPROVED_BEARER_TOKEN)
@@ -521,10 +545,114 @@ def get_results(job_id: str, APPROVED_URL: str, APPROVED_BEARER_TOKEN: str, pars
     logging.warning('received unknown status (%s)', response.status_code)
     return {}
 
+def list_all_job_ids_url(APPROVED_URL: str, parsed_args: CliArgparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/jobids'
+
+def do_get_all_job_ids(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: CliArgparse) -> None:
+    # Operator-mode entry point: list every job id Redis still knows
+    # about so the human can grep/cleanup/cross-ref-against-logs. We
+    # reuse the same bearer-token + approved-url plumbing as every other
+    # endpoint, so the server-side rate limit and auth apply uniformly.
+    url = list_all_job_ids_url(APPROVED_URL, parsed_args)
+    headers = just_authroization_header(BEARER_TOKEN)
+    try:
+        response = requests.get(url, headers=headers)
+    except requests.exceptions.ConnectionError:
+        logging.warning('[ jobids ] failed to reach %s', url)
+        return
+
+    if response.status_code != http.HTTPStatus.OK:
+        logging.warning('[ jobids ] http %s from server', response.status_code)
+        return
+
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        logging.warning('[ jobids ] invalid json response')
+        return
+
+    job_ids = payload.get('job_ids')
+    if not isinstance(job_ids, list):
+        logging.warning('[ jobids ] missing/invalid job_ids key in: %s', payload)
+        return
+
+    if not job_ids:
+        logging.info('[ jobids ] no jobs found')
+        return
+
+    logging.info('[ jobids ] %d job(s):', len(job_ids))
+    # Plain stdout (not via logging) so the output is greppable and
+    # pipe-able without timestamps/level decorations contaminating each
+    # line (e.g. `python cli.py manage --get-all-job-ids | grep ^abc`).
+    for job_id in job_ids:
+        print(job_id)
+
+def clear_job_url(APPROVED_URL: str, job_id: str, parsed_args: CliArgparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/jobs/{job_id}'
+
+def clear_all_url(APPROVED_URL: str, parsed_args: CliArgparse) -> str:
+    host = parsed_args.use_external_vps if parsed_args.use_external_vps is not None else LOCALHOST
+    port = HTTPS_PORT if parsed_args.use_external_vps is not None else PORT
+    return f'{host}:{port}/api/{APPROVED_URL}/jobs'
+
+def do_clear_job_id(
+    job_id: str,
+    APPROVED_URL: str,
+    BEARER_TOKEN: str,
+    parsed_args: CliArgparse,
+) -> None:
+    # Operator-mode entry point: ask the server to evict one job from
+    # every runtime store (Redis + SQLite + shared volume + PG logs).
+    # This CLI just relays whatever the server reports back.
+    url = clear_job_url(APPROVED_URL, job_id, parsed_args)
+    headers = just_authroization_header(BEARER_TOKEN)
+    try:
+        response = requests.delete(url, headers=headers)
+    except requests.exceptions.ConnectionError:
+        logging.warning('[ clear ] failed to reach %s', url)
+        return
+
+    if response.status_code != http.HTTPStatus.OK:
+        logging.warning('[ clear ] http %s from server', response.status_code)
+        return
+
+    logging.info('[ clear ] job %s cleared (pg logs included)', job_id)
+
+def do_clear_all(
+    APPROVED_URL: str,
+    BEARER_TOKEN: str,
+    parsed_args: CliArgparse,
+) -> None:
+    # Bulk operator-mode wipe. No client-side confirmation prompt: the
+    # opt-in is the flag itself, and the CLI is meant to be scriptable
+    # (a TTY-only prompt would silently get skipped in CI anyway).
+    url = clear_all_url(APPROVED_URL, parsed_args)
+    headers = just_authroization_header(BEARER_TOKEN)
+    try:
+        response = requests.delete(url, headers=headers)
+    except requests.exceptions.ConnectionError:
+        logging.warning('[ clear ] failed to reach %s', url)
+        return
+
+    if response.status_code != http.HTTPStatus.OK:
+        logging.warning('[ clear ] http %s from server', response.status_code)
+        return
+
+    try:
+        payload = response.json()
+        cleared = payload.get('cleared', '?')
+    except json.JSONDecodeError:
+        cleared = '?'
+    logging.info('[ clear ] %s job(s) cleared (pg logs included)', cleared)
+
 def try_connecting_to_server_and_allocate_a_job_id(
     APPROVED_URL: str,
     BEARER_TOKEN: str,
-    parsed_args: Argparse
+    parsed_args: CliArgparse
 ) -> typing.Optional[str]:
 
     connection_established = False
@@ -551,7 +679,7 @@ def upload_files_succeeded(
     job_id: str,
     APPROVED_URL: str,
     BEARER_TOKEN: str,
-    parsed_args: Argparse
+    parsed_args: CliArgparse
 ) -> bool:
     logging.info('[ step 3 ] uploaded started')
     if asyncio.run(upload(scan_dirname, files, job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)):
@@ -563,8 +691,8 @@ def upload_files_succeeded(
 
 # pylint: disable=too-many-nested-blocks
 def remove_loops(sarif: dict) -> dict:
-    for run in sarif.get('runs', []):
-        for result in run.get('results', []):
+    for sarif_run in sarif.get('runs', []):
+        for result in sarif_run.get('results', []):
             for codeFlow in result.get('codeFlows', []):
                 for threadFlow in codeFlow.get('threadFlows', []):
                     locations = threadFlow.get('locations', [])
@@ -575,8 +703,28 @@ def remove_loops(sarif: dict) -> dict:
                     threadFlow['locations'] = normalized
     return sarif
 
-def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+# Dispatcher base. Picks the concrete impl based on the runtime type
+# of parsed_args (registrations below). Because CliArgparse.parse()
+# can only return a CliRunArgparse or a CliManageArgparse — and both
+# are registered — the base body is unreachable at runtime; we still
+# define it (and raise) to (a) give callers a single stable entry
+# point and (b) surface any future "added a subcommand but forgot to
+# register" mistake loudly instead of silently no-op'ing.
+# pylint: disable=unused-argument
+@functools.singledispatch
+def main(parsed_args: CliArgparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+    raise NotImplementedError(f'no main impl for {type(parsed_args).__name__}')
 
+
+@main.register
+def run(parsed_args: CliRunArgparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+
+    # Scan-mode entry point. Allocates a job id, collects + uploads
+    # files, kicks off analysis, polls for completion, then either
+    # surfaces the kb path (agent mode) or writes/prints sarif. Typed
+    # against CliRunArgparse so parsed_args.scan_dirname is statically
+    # known to be set (not Optional) and parsed_args.with_agent /
+    # .save_sarif_to are reachable without isinstance narrowing.
     if job_id := try_connecting_to_server_and_allocate_a_job_id(APPROVED_URL, BEARER_TOKEN, parsed_args):
         if files := collect_relevant_files(parsed_args.scan_dirname):
             directories, filenames = collect_directories_and_filenames(files)
@@ -615,9 +763,28 @@ def main(parsed_args: Argparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
                                 logging.info('[ step 6 ] received sarif:\n%s', results)
                             break
 
+
+@main.register
+def manage(parsed_args: CliManageArgparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
+
+    # Operator-mode entry point. Dispatches on whichever of the three
+    # mutually-exclusive flags the user picked; argparse already
+    # enforced "exactly one of {get_all_job_ids, clear_job_id,
+    # clear_all}" is set, so the dispatch chain is exhaustive.
+    if parsed_args.get_all_job_ids:
+        do_get_all_job_ids(APPROVED_URL, BEARER_TOKEN, parsed_args)
+        return
+    if parsed_args.clear_job_id is not None:
+        do_clear_job_id(parsed_args.clear_job_id, APPROVED_URL, BEARER_TOKEN, parsed_args)
+        return
+    if parsed_args.clear_all:
+        do_clear_all(APPROVED_URL, BEARER_TOKEN, parsed_args)
+        return
+
+
 if __name__ == "__main__":
-    if args := Argparse.run():
-        logging.info('[ step 0 ] required args ok 😊')
-        if APPROVED_URL_0 := os.getenv('APPROVED_URL_0', None):
-            if APPROVED_BEARER_TOKEN_0 := os.getenv('APPROVED_BEARER_TOKEN_0', None):
-                main(args, APPROVED_URL_0, APPROVED_BEARER_TOKEN_0)
+    parsed = CliArgparse.parse()
+    logging.info('[ step 0 ] required args ok 😊')
+    if APPROVED_URL_0 := os.getenv('APPROVED_URL_0', None):
+        if APPROVED_BEARER_TOKEN_0 := os.getenv('APPROVED_BEARER_TOKEN_0', None):
+            main(parsed, APPROVED_URL_0, APPROVED_BEARER_TOKEN_0)

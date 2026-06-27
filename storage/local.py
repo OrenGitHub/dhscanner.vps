@@ -3,9 +3,11 @@ import json
 import uuid
 import time
 import typing
+import shutil
 import pathlib
 import asyncio
 import aiofiles
+import sqlalchemy
 
 from datetime import timedelta
 
@@ -17,6 +19,19 @@ from common.language import Language
 from logger.models import (
     Context,
     LogMessage
+)
+
+# Every per-job row lives in one of these tables; clearing a job means
+# DELETE-ing from each by job_id. Kept as a module-level tuple so adding
+# a new table only requires touching this one constant -- the clear paths
+# pick it up automatically.
+_JOB_SCOPED_TABLES: typing.Final[tuple] = (
+    models.FileMetadata,
+    models.NativeAstMetadata,
+    models.DhscannerAstMetadata,
+    models.CallablesMetadata,
+    models.FactsMetadata,
+    models.ResultsMetadata,
 )
 
 BASEDIR: typing.Final[pathlib.Path] = pathlib.Path(
@@ -204,7 +219,7 @@ class LocalStorage(interface.Storage):
         delta = end - start
         await self.logger.warning(
             LogMessage(
-                file_unique_id=a.file_unique_id,
+                file_unique_id=a.native_ast_unique_id,
                 job_id=a.job_id,
                 context=Context.READ_NATIVE_AST_FILE_FAILED,
                 original_filename=a.original_filename,
@@ -594,6 +609,41 @@ class LocalStorage(interface.Storage):
     async def delete_output(self, job_id: str) -> None:
         filename = LocalStorage.jobdir(job_id) / 'output.json'
         await asyncio.to_thread(os.remove, filename)
+
+    @typing.override
+    async def clear_job_state(self, job_id: str) -> None:
+        # Operator-only path: nuke every artifact of one job in the two
+        # backing stores the LocalStorage owns -- the SQLite metadata
+        # tables and the shared-volume directory tree. The postgres
+        # logger `logs` rows are wiped by the app-tier endpoint (via
+        # Logger.delete_for_job), not here, since LocalStorage doesn't
+        # own that connection.
+        with db.SessionLocal() as session:
+            for table in _JOB_SCOPED_TABLES:
+                session.execute(
+                    sqlalchemy.delete(table).where(table.job_id == job_id)
+                )
+            session.commit()
+
+        job_dir = LocalStorage.jobdir(job_id)
+        # `ignore_errors` covers both the no-such-dir case (the job died
+        # before any file landed) and any leftover-permission weirdness
+        # from a previously-running worker holding a handle.
+        await asyncio.to_thread(shutil.rmtree, job_dir, True)
+
+    @typing.override
+    async def clear_all_job_state(self) -> None:
+        # Bulk variant: same two-stage wipe as `clear_job_state` but in
+        # one shot -- a single TRUNCATE-equivalent DELETE per table, then
+        # rmtree+recreate of the BASEDIR. We re-create BASEDIR so the
+        # very next upload doesn't fail mkdir-parents races.
+        with db.SessionLocal() as session:
+            for table in _JOB_SCOPED_TABLES:
+                session.execute(sqlalchemy.delete(table))
+            session.commit()
+
+        await asyncio.to_thread(shutil.rmtree, BASEDIR, True)
+        BASEDIR.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def jobdir(job_id: str) -> pathlib.Path:

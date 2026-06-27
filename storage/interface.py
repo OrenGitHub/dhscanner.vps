@@ -113,6 +113,14 @@ class Storage(abc.ABC):
     async def delete_output(self, job_id: str) -> None:
         ...
 
+    @abc.abstractmethod
+    async def clear_job_state(self, job_id: str) -> None:
+        ...
+
+    @abc.abstractmethod
+    async def clear_all_job_state(self) -> None:
+        ...
+
     @staticmethod
     def load_files_metadata_from_db(job_id: str) -> list[FileMetadata]:
         with db.SessionLocal() as session:
