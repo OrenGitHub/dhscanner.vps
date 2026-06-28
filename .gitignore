@@ -1,0 +1,24 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Virtual envs (none committed today, just defensive)
+.venv/
+venv/
+env/
+
+# launch-local-app runtime artefacts
+# Per-iteration plan.json / outcome.json / tool_transcript.json / launch.log
+# accumulate under here. Useful for post-mortem on a developer machine,
+# never useful to ship in git -- can grow to many MB per target run.
+agent/.launch_logs/
+agent/.env
+
+# Local scratch / build outputs that have appeared in this repo before
+happy-build.log
+output.json
