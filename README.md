@@ -12,8 +12,12 @@ optimized backend for dhscanner
 $ git clone --recurse-submodules https://github.com/OrenGitHub/dhscanner.vps.git
 $ cd dhscanner.vps
 
+# set APPROVED_URL_0 and APPROVED_BEARER_TOKEN_0 in .env at repo root
+# (see .env.example). --env-file .env is required because -f compose/...
+# makes compose's project directory compose/, so .env at the repo root
+# is NOT auto-loaded.
 # about 3 min. on a modern laptop
-$ docker compose -f ./compose/compose.base.yaml -f ./compose/compose.app.yaml -f ./compose/compose.fronts.yaml -f ./compose/compose.prebuilt.yaml -f ./compose/compose.workers.yaml up -d
+$ docker compose --env-file .env -f ./compose/compose.base.yaml -f ./compose/compose.app.yaml -f ./compose/compose.fronts.yaml -f ./compose/compose.prebuilt.yaml -f ./compose/compose.workers.yaml up -d
 
 # install dependencies
 $ pipenv shell

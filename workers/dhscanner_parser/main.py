@@ -115,6 +115,13 @@ class DhscannerParser(AbstractWorker):
     ) -> typing.Optional[dict]:
         start = time.monotonic()
         url = DHSCANNER_AST_BUILDER_URL[a.language]
+        # Diagnostic accumulator for the SYSTEM_FAILURE fall-through. Without
+        # this the log row for every non-200 / decode-error just said
+        # 'nothing else to add', which cost us 97 silently-lost YAML files
+        # before we noticed the parsers image was serving a 404 for
+        # /from/yaml/to/dhscanner/ast. Every non-success branch below sets
+        # `emessage` before falling through.
+        emessage = 'no exception'
         try:
             payload = {
                 'filename': code['source'][0],
@@ -160,19 +167,30 @@ class DhscannerParser(AbstractWorker):
 
                     return dhscanner_ast
 
-        except aiohttp.ClientError:
-            pass
+                # Non-200 from the parsers service. This is the branch that
+                # bit us when the prebuilt parsers image lacked the
+                # /from/yaml/to/dhscanner/ast route and returned an HTML
+                # 404 page. Capture status + a small body slice so the log
+                # row explains WHICH endpoint is broken and how.
+                try:
+                    body = await response.text()
+                except (aiohttp.ClientError, UnicodeDecodeError) as _read_err:
+                    body = f'<body unreadable: {type(_read_err).__name__}: {_read_err}>'
+                emessage = f'HTTP {response.status} from {url}: {body[:500]}'
 
-        except json.JSONDecodeError:
-            pass
+        except aiohttp.ClientError as e:
+            emessage = f'aiohttp.ClientError: {e}'
+
+        except json.JSONDecodeError as e:
+            emessage = f'json.JSONDecodeError: {e}'
 
         # Defensive: `response.json()` ultimately decodes utf-8 internally;
         # any non-utf-8 byte in the parsers-service response would otherwise
         # surface as an unhandled UnicodeDecodeError and topple the worker.
         # Logging a single file as DHSCANNER_PARSING_SYSTEM_FAILURE is the
         # right outcome instead.
-        except UnicodeDecodeError:
-            pass
+        except UnicodeDecodeError as e:
+            emessage = f'UnicodeDecodeError: {e}'
 
         end = time.monotonic()
         delta = end - start
@@ -183,7 +201,8 @@ class DhscannerParser(AbstractWorker):
                 context=Context.DHSCANNER_PARSING_SYSTEM_FAILURE,
                 original_filename=a.original_filename,
                 language=a.language,
-                duration=timedelta(seconds=delta)
+                duration=timedelta(seconds=delta),
+                more_details=f'exception(s): {emessage}'
             )
         )
         return None

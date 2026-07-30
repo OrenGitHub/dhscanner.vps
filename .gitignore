@@ -19,6 +19,11 @@ env/
 agent/.launch_logs/
 agent/.env
 
+# Compose stack secrets (APPROVED_URL_0, APPROVED_BEARER_TOKEN_0, ...).
+# docker compose auto-reads this from the working directory of the
+# `docker compose -f compose/...` invocation, which is the repo root.
+.env
+
 # Local scratch / build outputs that have appeared in this repo before
 happy-build.log
 output.json
