@@ -63,9 +63,28 @@ class Queryengine(AbstractWorker):
                         # probably unreachable code since an ok response
                         # means everything went well on the server side
                         emessage = 'invalid json response without kb location'
+                    else:
+                        # Non-200 (413 Payload Too Large, 500, ...) used to
+                        # fall through with emessage='no exception', which
+                        # made the KBGEN_UPLOAD_FOR_AGENT_FAILED row useless
+                        # for diagnosis. Capture status + a short body slice
+                        # so the log row actually explains why the kb never
+                        # made it. Body is truncated because /uploadkb can
+                        # echo back big error pages on 413.
+                        try:
+                            body = await response.text()
+                        except (aiohttp.ClientError, UnicodeDecodeError) as _read_err:
+                            body = f'<body unreadable: {_read_err}>'
+                        emessage = f'HTTP {response.status} from /uploadkb: {body[:500]}'
 
             except aiohttp.ClientError as e:
-                emessage = str(e)
+                emessage = f'aiohttp.ClientError: {e}'
+            # Anything not derived from aiohttp.ClientError (asyncio.TimeoutError,
+            # OSError, JSON serialization TypeError from json=all_facts on a
+            # huge payload, MemoryError, ...) still propagates up on purpose:
+            # those are the "worker is genuinely broken" cases and we want
+            # them to surface as a container crash rather than be logged as
+            # a normal per-job failure.
 
             end = time.monotonic()
             delta = end - start

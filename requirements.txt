@@ -1,3 +1,5 @@
 aiofiles
 aiohttp
+openai
+python-dotenv
 requests

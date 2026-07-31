@@ -14,7 +14,13 @@ import logging
 import aiofiles
 import aiohttp
 import requests
-from argparse_wrapper import CliArgparse, CliRunArgparse, CliManageArgparse
+from argparse_wrapper import (
+    CliArgparse,
+    CliRunArgparse,
+    CliManageArgparse,
+    CliLaunchLocalAppArgparse,
+)
+from agent import launcher as local_app_launcher
 import cli_logger
 
 LOCALHOST: typing.Final[str] = 'http://localhost'
@@ -765,6 +771,24 @@ def run(parsed_args: CliRunArgparse, APPROVED_URL: str, BEARER_TOKEN: str) -> No
 
 
 @main.register
+def launch_local_app(
+    parsed_args: CliLaunchLocalAppArgparse,
+    APPROVED_URL: str,
+    BEARER_TOKEN: str,
+) -> None:
+
+    # Agent-driven launcher entry point: hand control to the dedicated
+    # launcher module. APPROVED_URL / APPROVED_BEARER_TOKEN are unused
+    # here (the launcher only ever talks to localhost on the target
+    # app's port + the OpenAI API), but the dispatcher contract still
+    # requires them so this arm stays in shape with `run`/`manage`.
+    del APPROVED_URL, BEARER_TOKEN
+    exit_code = local_app_launcher.launch(parsed_args)
+    if exit_code != 0:
+        raise SystemExit(exit_code)
+
+
+@main.register
 def manage(parsed_args: CliManageArgparse, APPROVED_URL: str, BEARER_TOKEN: str) -> None:
 
     # Operator-mode entry point. Dispatches on whichever of the three
@@ -785,6 +809,14 @@ def manage(parsed_args: CliManageArgparse, APPROVED_URL: str, BEARER_TOKEN: str)
 if __name__ == "__main__":
     parsed = CliArgparse.parse()
     logging.info('[ step 0 ] required args ok 😊')
-    if APPROVED_URL_0 := os.getenv('APPROVED_URL_0', None):
+    # The launch-local-app subcommand only ever drives a local
+    # subprocess + OpenAI; it never reaches an approved url or a
+    # bearer token, so we bypass the env-var gate that the other two
+    # subcommands need. Passing empty strings keeps the dispatcher
+    # signature uniform without leaking irrelevant config requirements
+    # onto users who only want to launch a target app.
+    if isinstance(parsed, CliLaunchLocalAppArgparse):
+        main(parsed, '', '')
+    elif APPROVED_URL_0 := os.getenv('APPROVED_URL_0', None):
         if APPROVED_BEARER_TOKEN_0 := os.getenv('APPROVED_BEARER_TOKEN_0', None):
             main(parsed, APPROVED_URL_0, APPROVED_BEARER_TOKEN_0)

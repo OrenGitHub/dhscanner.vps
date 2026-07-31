@@ -21,6 +21,42 @@ CLI_MANAGE_DESC: typing.Final[str] = """
 operator-mode helpers: list / clear jobs on the server
 """
 
+CLI_LAUNCH_LOCAL_APP_DESC: typing.Final[str] = """
+agent-driven helper: inspect a local repo, propose a launch plan, run it,
+probe a healthcheck url, and on failure feed the errors back to the model
+for a follow-up plan (up to --max-iterations attempts)
+"""
+
+CLI_LAUNCH_TARGET_DIR_HELP: typing.Final[str] = """
+relative / absolute path of the target app's repo (e.g. ../phpbb)
+"""
+
+CLI_LAUNCH_MODEL_HELP: typing.Final[str] = """
+openai chat model used to plan the launch (default: gpt-5 or $OPENAI_MODEL)
+"""
+
+CLI_LAUNCH_MAX_ITERATIONS_HELP: typing.Final[str] = """
+upper bound on plan -> run -> probe -> feedback iterations (default: 5)
+"""
+
+CLI_LAUNCH_OPENAI_TIMEOUT_HELP: typing.Final[str] = """
+per-call openai timeout in seconds (default: 180)
+"""
+
+CLI_LAUNCH_PROBE_DELAY_HELP: typing.Final[str] = """
+seconds to wait after launch_command before the first healthcheck probe
+(default: 5)
+"""
+
+CLI_LAUNCH_DRY_RUN_HELP: typing.Final[str] = """
+ask the model for a plan and print it, but do not run any command
+"""
+
+CLI_LAUNCH_TEARDOWN_HELP: typing.Final[str] = """
+run the final accepted plan's cleanup_commands at exit even on success
+(default: leave the app running so the next loop step can talk to it)
+"""
+
 CLI_SCAN_DIRNAME_HELP: typing.Final[str] = """
 relative / absolute path of the dir you want to scan
 """
@@ -143,6 +179,32 @@ def non_empty_kb_filename(kb_filename: str) -> str:
     return kb_filename
 
 
+def positive_int(raw: str) -> int:
+    # Used by --max-iterations: argparse already takes care of the
+    # int parse; we just refuse 0/negative so a typo can't silently
+    # turn the whole launch loop into a no-op.
+    try:
+        value = int(raw)
+    # pylint: disable=raise-missing-from
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'not an int: {raw}')
+    if value < 1:
+        raise argparse.ArgumentTypeError(f'must be >= 1, got {value}')
+    return value
+
+
+def positive_float(raw: str) -> float:
+    # Same intent as positive_int, but for the timeout/delay knobs.
+    try:
+        value = float(raw)
+    # pylint: disable=raise-missing-from
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'not a number: {raw}')
+    if value <= 0.0:
+        raise argparse.ArgumentTypeError(f'must be > 0, got {value}')
+    return value
+
+
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class CliArgparse:
     # Base class: only the fields *every* subcommand shares. Right now
@@ -154,7 +216,7 @@ class CliArgparse:
     use_external_vps: typing.Optional[str]
 
     @staticmethod
-    def parse() -> CliRunArgparse | CliManageArgparse:
+    def parse() -> CliRunArgparse | CliManageArgparse | CliLaunchLocalAppArgparse:
         parser = argparse.ArgumentParser(description=CLI_PROG_DESC)
 
         # Args shared by every subcommand live on a parent parser so we
@@ -171,7 +233,7 @@ class CliArgparse:
         subparsers = parser.add_subparsers(
             dest='command',
             required=True,
-            metavar='{run,manage}',
+            metavar='{run,manage,launch-local-app}',
         )
 
         # ---- run: scan a directory --------------------------------------
@@ -242,6 +304,69 @@ class CliArgparse:
             help=CLI_CLEAR_ALL_HELP,
         )
 
+        # ---- launch-local-app: agent-driven launcher --------------------
+        # Doesn't take --use_external_vps because it only ever drives a
+        # local subprocess + a localhost healthcheck; an external vps is
+        # the dhscanner side, not the target app being launched. The
+        # positional `target_dir` mirrors the way users naturally call
+        # this from the shell (`python cli.py launch-local-app ../phpbb`).
+        launch_parser = subparsers.add_parser(
+            'launch-local-app',
+            description=CLI_LAUNCH_LOCAL_APP_DESC,
+            help='agent-driven local app launcher',
+        )
+        launch_parser.add_argument(
+            'target_dir',
+            type=existing_non_empty_dirname,
+            metavar='path/to/target/app',
+            help=CLI_LAUNCH_TARGET_DIR_HELP,
+        )
+        launch_parser.add_argument(
+            '--model',
+            required=False,
+            default=None,
+            metavar='gpt-5',
+            help=CLI_LAUNCH_MODEL_HELP,
+        )
+        launch_parser.add_argument(
+            '--max-iterations',
+            required=False,
+            type=positive_int,
+            default=5,
+            metavar='N',
+            help=CLI_LAUNCH_MAX_ITERATIONS_HELP,
+        )
+        launch_parser.add_argument(
+            '--openai-timeout',
+            required=False,
+            type=positive_float,
+            default=180.0,
+            metavar='SECONDS',
+            help=CLI_LAUNCH_OPENAI_TIMEOUT_HELP,
+        )
+        launch_parser.add_argument(
+            '--probe-delay',
+            required=False,
+            type=positive_float,
+            default=5.0,
+            metavar='SECONDS',
+            help=CLI_LAUNCH_PROBE_DELAY_HELP,
+        )
+        launch_parser.add_argument(
+            '--dry-run',
+            required=False,
+            default=False,
+            action='store_true',
+            help=CLI_LAUNCH_DRY_RUN_HELP,
+        )
+        launch_parser.add_argument(
+            '--teardown-on-exit',
+            required=False,
+            default=False,
+            action='store_true',
+            help=CLI_LAUNCH_TEARDOWN_HELP,
+        )
+
         ns = parser.parse_args()
 
         # Dispatch the parsed Namespace into the right concrete
@@ -255,6 +380,21 @@ class CliArgparse:
                 ignore_testing_code=ns.ignore_testing_code,
                 save_sarif_to=ns.save_sarif_to,
                 with_agent=ns.with_agent,
+            )
+
+        if ns.command == 'launch-local-app':
+            # No --use_external_vps for this command (see the subparser
+            # definition above for why); pass None to satisfy the base
+            # class without piggybacking unrelated semantics on it.
+            return CliLaunchLocalAppArgparse(
+                use_external_vps=None,
+                target_dir=ns.target_dir,
+                model=ns.model,
+                max_iterations=ns.max_iterations,
+                openai_timeout=ns.openai_timeout,
+                probe_delay=ns.probe_delay,
+                dry_run=ns.dry_run,
+                teardown_on_exit=ns.teardown_on_exit,
             )
 
         return CliManageArgparse(
@@ -285,6 +425,22 @@ class CliManageArgparse(CliArgparse):
     get_all_job_ids: bool
     clear_job_id: typing.Optional[str]
     clear_all: bool
+
+
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class CliLaunchLocalAppArgparse(CliArgparse):
+    # Agent-driven launcher knobs. target_dir is the only required
+    # input; the rest tune the iteration loop. `model` is Optional so
+    # the launcher module can fall back to $OPENAI_MODEL / its own
+    # default without the argparse layer needing to know either of
+    # those values (keeps env lookups out of the parser).
+    target_dir: pathlib.Path
+    model: typing.Optional[str]
+    max_iterations: int
+    openai_timeout: float
+    probe_delay: float
+    dry_run: bool
+    teardown_on_exit: bool
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
