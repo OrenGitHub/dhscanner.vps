@@ -5,12 +5,29 @@
             "label": "mypy",
             "type": "shell",
             "command": "pipenv",
-            "args": ["run", "mypy", "."],
+            "args": [
+                "run",
+                "mypy",
+                "."
+            ],
             "problemMatcher": [],
             "group": {
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "pylint",
+            "type": "shell",
+            "command": "pipenv",
+            "args": [
+                "run",
+                "pylint",
+                "--recursive=y",
+                "."
+            ],
+            "problemMatcher": [],
+            "group": "build"
         }
     ]
 }

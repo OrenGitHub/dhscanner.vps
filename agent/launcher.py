@@ -397,6 +397,7 @@ _DIRS_PRUNED_FROM_TOOLS: typing.Final[frozenset[str]] = frozenset({
 })
 
 
+# pylint: disable=too-many-return-statements
 def _resolve_tool_path(
     target_dir: pathlib.Path,
     raw: str,
@@ -485,7 +486,7 @@ def _tool_list_dir(target_dir: pathlib.Path, args: dict[str, typing.Any]) -> str
     return '\n'.join(out_lines)
 
 
-# pylint: disable=too-many-locals,too-many-branches
+# pylint: disable=too-many-locals,too-many-branches,too-many-return-statements,too-many-statements
 def _tool_grep(target_dir: pathlib.Path, args: dict[str, typing.Any]) -> str:
     pattern = args.get('pattern')
     glob_pat = args.get('glob')
