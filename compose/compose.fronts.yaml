@@ -2,35 +2,35 @@ services:
 
   frontjs:
     build:
-      context: ../dhscanner/dhscanner.0.fronts/js
+      context: ../dhscanner.core/dhscanner.service.fronts/js
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontts:
     build:
-      context: ../dhscanner/dhscanner.0.fronts/ts
+      context: ../dhscanner.core/dhscanner.service.fronts/ts
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontgo:
     build:
-      context: ../dhscanner/dhscanner.0.fronts/go
+      context: ../dhscanner.core/dhscanner.service.fronts/go
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontphp:
     build:
-      context: ../dhscanner/dhscanner.0.fronts/php
+      context: ../dhscanner.core/dhscanner.service.fronts/php
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontpy:
     build:
-      context: ../dhscanner/dhscanner.0.fronts/py
+      context: ../dhscanner.core/dhscanner.service.fronts/py
       dockerfile: Dockerfile
       args:
         TZ: ${TZ:-Asia/Jerusalem}
@@ -39,14 +39,14 @@ services:
 
   frontcs:
     build:
-      context: ../dhscanner/dhscanner.0.fronts/cs
+      context: ../dhscanner.core/dhscanner.service.fronts/cs
       dockerfile: Dockerfile
     networks:
       - dhscanner
 
   frontrb:
     build:
-      context: ../dhscanner/dhscanner.0.fronts/rb
+      context: ../dhscanner.core/dhscanner.service.fronts/rb
       dockerfile: Dockerfile
     networks:
       - dhscanner
