@@ -16,8 +16,8 @@ This is step 2 of the top-level main loop:
     4. fuzz the app with data collected in step 3
 
 The public entry point is ``launch(parsed_args)``, which the CLI
-dispatcher in ``cli.py`` calls. It logs through the root logger (so the
-existing ``cli_logger.configure()`` palette applies).
+dispatcher in ``cli/run.py`` calls. It logs through the root logger (so
+the existing ``cli.logger.configure()`` palette applies).
 
 Design notes:
 
@@ -51,7 +51,7 @@ import typing
 
 import requests
 
-from argparse_wrapper import CliLaunchLocalAppArgparse
+from cli.argparse_wrapper import CliLaunchLocalAppArgparse
 
 
 HERE: typing.Final[pathlib.Path] = pathlib.Path(__file__).resolve().parent

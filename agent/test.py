@@ -9,11 +9,11 @@ import logging
 import requests
 
 try:
-    from argparse_wrapper import ExploreWithAgentArgparse as Argparse
+    from cli.argparse_wrapper import ExploreWithAgentArgparse as Argparse
 except ModuleNotFoundError as exc:
-    if exc.name == 'argparse_wrapper':
+    if exc.name in ('cli', 'cli.argparse_wrapper'):
         raise SystemExit(
-            'argparse_wrapper is not importable. Run from repo root with '
+            'cli.argparse_wrapper is not importable. Run from repo root with '
             '`python -m agent.test --use_kb ... --save_sarif_to ...`'
         ) from exc
     raise

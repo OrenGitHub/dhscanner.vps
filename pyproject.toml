@@ -1,3 +1,6 @@
+[tool.pylint."MASTER"]
+init-hook = 'import sys; sys.path.insert(0, "dhscanner.infra")'
+
 [tool.pylint."MESSAGES CONTROL"]
 disable = [
     "fixme",
@@ -13,8 +16,9 @@ disable = [
     "missing-module-docstring",
     "missing-function-docstring"
 ]
-ignore-paths = ["dhscanner"]
+ignore-paths = ["dhscanner\\.core", "dhscanner\\.packages"]
 
 [tool.mypy]
-exclude = "^dhscanner/"
+exclude = "^dhscanner\\.(core|packages)/"
 ignore_missing_imports = true
+mypy_path = "dhscanner.infra"

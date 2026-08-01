@@ -8,7 +8,7 @@ services:
 
   app:
     build:
-      context: ../
+      context: ../dhscanner.infra
       dockerfile: app/Dockerfile
       args:
         TZ: ${TZ:-Asia/Jerusalem}

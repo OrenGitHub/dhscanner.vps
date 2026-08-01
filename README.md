@@ -24,7 +24,7 @@ $ pipenv shell
 $ pipenv install
 
 # start scanning 🙂
-$ python ./cli.py run --scan_dirname repo/you/want/to/scan --ignore_testing_code true
+$ python -m cli run --scan_dirname repo/you/want/to/scan --ignore_testing_code true
 ```
 
 ## operator commands
@@ -35,13 +35,13 @@ server you scan against (add `--use_external_vps https://...` for a remote vps).
 
 ```bash
 # list every job id still tracked by redis (one per line, greppable)
-$ python ./cli.py manage --get-all-job-ids
+$ python -m cli manage --get-all-job-ids
 
 # wipe one job: redis + sqlite + shared volume + postgres logger rows
-$ python ./cli.py manage --clear-job-id <job_id>
+$ python -m cli manage --clear-job-id <job_id>
 
 # wipe every job (same scope as above, applied to all jobs)
-$ python ./cli.py manage --clear-all
+$ python -m cli manage --clear-all
 ```
 
 The three are mutually exclusive (exactly one is required under `manage`),
@@ -72,19 +72,19 @@ the plan as `iter-NN/tool_transcript.json` for post-mortem inspection.
 ```bash
 # minimum invocation
 $ export OPENAI_API_KEY=sk-...
-$ python ./cli.py launch-local-app ../phpbb
+$ python -m cli launch-local-app ../phpbb
 
 # common knobs
-$ python ./cli.py launch-local-app ../phpbb \
+$ python -m cli launch-local-app ../phpbb \
     --model gpt-5 \
     --max-iterations 5 \
     --probe-delay 5
 
 # print the first plan and exit without running anything
-$ python ./cli.py launch-local-app ../phpbb --dry-run
+$ python -m cli launch-local-app ../phpbb --dry-run
 
 # run the accepted plan's cleanup_commands on exit (default: leave running)
-$ python ./cli.py launch-local-app ../phpbb --teardown-on-exit
+$ python -m cli launch-local-app ../phpbb --teardown-on-exit
 ```
 
 Per-iteration artefacts (the model's plan, captured logs, the probe result)

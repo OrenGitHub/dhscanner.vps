@@ -43,7 +43,7 @@ jobs:
           pip install -r requirements.txt
           git clone https://github.com/SickChill/sickchill.git
           cd sickchill && git checkout tags/2024.3.1 && cd ../
-          python cli.py run --scan_dirname ./sickchill --ignore_testing_code true --save_sarif_to output.json
+          python -m cli run --scan_dirname ./sickchill --ignore_testing_code true --save_sarif_to output.json
 
       - name: fail if output sarif is different from expected
         run: |
@@ -64,7 +64,7 @@ jobs:
           pip install -r requirements.txt
           git clone https://github.com/idurar/idurar-erp-crm.git
           cd idurar-erp-crm && git checkout d7b2215a17bb2b52acfdab8f1646685d13df9a00 && cd ../
-          python cli.py run --scan_dirname ./idurar-erp-crm --ignore_testing_code true --save_sarif_to output.json
+          python -m cli run --scan_dirname ./idurar-erp-crm --ignore_testing_code true --save_sarif_to output.json
 
       - name: fail if output sarif is different from expected
         run: |
@@ -85,7 +85,7 @@ jobs:
           pip install -r requirements.txt
           git clone https://github.com/usememos/memos.git
           cd memos && git checkout v0.14.0 && cd ../
-          python cli.py run --scan_dirname ./memos --ignore_testing_code true --save_sarif_to output.json
+          python -m cli run --scan_dirname ./memos --ignore_testing_code true --save_sarif_to output.json
 
       - name: fail if output sarif is different from expected
         run: |
@@ -106,7 +106,7 @@ jobs:
           pip install -r requirements.txt
           git clone https://github.com/formbricks/formbricks.git
           cd formbricks && git checkout v3.16.0 && cd ../
-          python cli.py run --scan_dirname ./formbricks --ignore_testing_code true --save_sarif_to output.json
+          python -m cli run --scan_dirname ./formbricks --ignore_testing_code true --save_sarif_to output.json
 
       - name: fail if output sarif is different from expected
         run: |

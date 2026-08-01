@@ -59,7 +59,7 @@ There are two exit modes, chosen at `/analyze` time via `agent_mode`:
             │ (get_jobs_waiting_for) │
             ▼                        ▼
    ┌───────────────────────────────────────────────────────────────┐
-   │                    Python workers (workers/*)                 │
+   │             Python workers (dhscanner.infra/workers/*)        │
    │                                                               │
    │   native_parser        ──HTTP──▶  frontjs / frontts /         │
    │                                   frontphp / frontpy /        │
@@ -99,7 +99,7 @@ docker network.
 
 Job state is a single string key in Redis: `<job_id>` → JSON
 `{"status": "<Status>"}`. Statuses are defined in
-`coordinator/interface.py` and advance monotonically forward:
+`dhscanner.infra/coordinator/interface.py` and advance monotonically forward:
 
 ```text
    client (CLI) ──/analyze──▶ WaitingForNativeParsing
@@ -133,7 +133,7 @@ Job state is a single string key in Redis: `<job_id>` → JSON
                                                   (SARIF on shared volume)
 ```
 
-Each worker follows the same loop (see `workers/interface.py`):
+Each worker follows the same loop (see `dhscanner.infra/workers/interface.py`):
 
 1. `get_jobs_waiting_for(self.status)` — ask Redis which jobs are in
    this worker's owned status.
@@ -164,13 +164,13 @@ between them except via metadata IDs.
 The lifetime of a job spans all four stores; the operator commands
 under `manage` (`--clear-job-id`, `--clear-all`) wipe every one of
 them in tandem so an operator's "the job is gone" mental model
-matches every backing store (see `app/main.py`'s DELETE handlers and
-`storage/local.py`'s `clear_job_state`).
+matches every backing store (see `dhscanner.infra/app/main.py`'s DELETE
+handlers and `dhscanner.infra/storage/local.py`'s `clear_job_state`).
 
 ## Two modes at the queryengine stage
 
 Every stage before `queryengine` is identical between the two modes;
-the split happens inside `workers/queryengine/main.py`:
+the split happens inside `dhscanner.infra/workers/queryengine/main.py`:
 
 - **Normal mode** (`agent_mode = false`) — POST all facts to
   `queryengine:/querycheck`. The response is either a Prolog-style
