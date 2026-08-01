@@ -1,3 +1,9 @@
+# TODO(consolidate): promote this to a `python -m cli explore` subcommand.
+# Currently a standalone script invoked as `python -m agent.explore`, but the
+# sibling `agent/launcher.py` is wired as a proper CLI subcommand
+# (`python -m cli launch-local-app`). Making explore follow the same pattern
+# would unify the three-step agent flow into one `python -m cli {run,
+# launch-local-app, explore}` surface. Same TODO applies to `agent/test.py`.
 from __future__ import annotations
 
 import sys
@@ -9,7 +15,7 @@ import logging
 
 import requests
 
-from argparse_wrapper import ExploreWithAgentArgparse as Argparse
+from cli.argparse_wrapper import ExploreWithAgentArgparse as Argparse
 
 QUERYENGINE_API_URL: typing.Final[str] = 'http://localhost:3000/api'
 

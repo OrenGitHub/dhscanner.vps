@@ -52,8 +52,9 @@ submodule's `AGENTS.md` so they stay co-located with the grammar they govern.
 
 ## Everything else
 
-For changes that are genuinely top-level (the FastAPI app under `app/`, the
-CLI in `cli.py`, the workers, the coordinator, the compose files under
+For changes that are genuinely top-level (the FastAPI app under
+`dhscanner.infra/app/`, the
+CLI in `cli/`, the workers, the coordinator, the compose files under
 `compose/`, etc.) there is currently no extra agent contract beyond the
 project's normal lint / type-check / test CI:
 

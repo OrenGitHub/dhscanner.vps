@@ -107,7 +107,7 @@ simple dev script to run kb api queries
 """
 
 EXPLORE_WITH_AGENT_USE_KB_HELP: typing.Final[str] = """
-kb filename returned from cli.py run --with_agent flow
+kb filename returned from `python -m cli run --with_agent` flow
 """
 
 HTTPS_PORT: typing.Final[int] = 443
@@ -309,7 +309,7 @@ class CliArgparse:
         # local subprocess + a localhost healthcheck; an external vps is
         # the dhscanner side, not the target app being launched. The
         # positional `target_dir` mirrors the way users naturally call
-        # this from the shell (`python cli.py launch-local-app ../phpbb`).
+        # this from the shell (`python -m cli launch-local-app ../phpbb`).
         launch_parser = subparsers.add_parser(
             'launch-local-app',
             description=CLI_LAUNCH_LOCAL_APP_DESC,

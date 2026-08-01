@@ -14,14 +14,14 @@ import logging
 import aiofiles
 import aiohttp
 import requests
-from argparse_wrapper import (
+from cli.argparse_wrapper import (
     CliArgparse,
     CliRunArgparse,
     CliManageArgparse,
     CliLaunchLocalAppArgparse,
 )
 from agent import launcher as local_app_launcher
-import cli_logger
+from cli import logger as cli_logger
 
 LOCALHOST: typing.Final[str] = 'http://localhost'
 PORT: typing.Final[int] = 8000
@@ -591,7 +591,7 @@ def do_get_all_job_ids(APPROVED_URL: str, BEARER_TOKEN: str, parsed_args: CliArg
     logging.info('[ jobids ] %d job(s):', len(job_ids))
     # Plain stdout (not via logging) so the output is greppable and
     # pipe-able without timestamps/level decorations contaminating each
-    # line (e.g. `python cli.py manage --get-all-job-ids | grep ^abc`).
+    # line (e.g. `python -m cli manage --get-all-job-ids | grep ^abc`).
     for job_id in job_ids:
         print(job_id)
 
@@ -806,7 +806,7 @@ def manage(parsed_args: CliManageArgparse, APPROVED_URL: str, BEARER_TOKEN: str)
         return
 
 
-if __name__ == "__main__":
+def main_entry() -> None:
     parsed = CliArgparse.parse()
     logging.info('[ step 0 ] required args ok 😊')
     # The launch-local-app subcommand only ever drives a local
@@ -820,3 +820,7 @@ if __name__ == "__main__":
     elif APPROVED_URL_0 := os.getenv('APPROVED_URL_0', None):
         if APPROVED_BEARER_TOKEN_0 := os.getenv('APPROVED_BEARER_TOKEN_0', None):
             main(parsed, APPROVED_URL_0, APPROVED_BEARER_TOKEN_0)
+
+
+if __name__ == "__main__":
+    main_entry()
