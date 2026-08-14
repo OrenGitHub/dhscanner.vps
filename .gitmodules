@@ -7,9 +7,9 @@
 [submodule "dhscanner.packages/dhscanner.bitcode"]
 	path = dhscanner.packages/dhscanner.bitcode
 	url = https://github.com/OrenGitHub/dhscanner.bitcode.git
-[submodule "dhscanner.packages/dhscanner.kbgen"]
-	path = dhscanner.packages/dhscanner.kbgen
-	url = https://github.com/OrenGitHub/dhscanner.kbgen.git
 [submodule "dhscanner.packages/dhscanner.kbapi"]
 	path = dhscanner.packages/dhscanner.kbapi
 	url = https://github.com/OrenGitHub/dhscanner.kbapi.git
+[submodule "dhscanner.packages/dhscanner.kbgen"]
+	path = dhscanner.packages/dhscanner.kbgen
+	url = https://github.com/OrenGitHub/dhscanner.kbgen.git

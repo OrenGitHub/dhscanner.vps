@@ -1,7 +1,7 @@
 services:
 
   parsers:
-    image: orenishdocker/dhscanner-parsers:1.1.13-x64
+    image: orenishdocker/dhscanner-parsers:1.1.14-x64
     networks:
       - dhscanner
   
@@ -11,12 +11,12 @@ services:
       - dhscanner
   
   kbgen:
-    image: orenishdocker/dhscanner-kbgen:1.0.32-x64
+    image: orenishdocker/dhscanner-kbgen:1.0.33-x64
     networks:
       - dhscanner
   
   queryengine:
-    image: orenishdocker/dhscanner-queryengine:1.0.40-x64
+    image: orenishdocker/dhscanner-queryengine:1.0.42-x64
     ports:
       - 3000:3000
     networks:
