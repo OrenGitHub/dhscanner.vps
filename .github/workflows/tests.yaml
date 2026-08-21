@@ -106,18 +106,56 @@ jobs:
           pip install -r requirements.txt
           git clone https://github.com/formbricks/formbricks.git
           cd formbricks && git checkout v3.16.0 && cd ../
-          python -m cli run --scan_dirname ./formbricks --ignore_testing_code true --save_sarif_to output.json
-
-      - name: fail if output sarif is different from expected
-        run: |
-          set +e
-          delta=$(diff output.json tests/expected/formbricks.sarif.json)
-          diff_exit=$?
-          set -e
-          if [ "$diff_exit" -ne 0 ]; then
-            echo "$delta"
+          # Agent mode: analysis stops after the queryengine has written
+          # the KB; no SARIF is produced. The CLI logs the KB path as
+          # "[ step 6 ] kb filename: /tmp/kb_XXX.pl", which the next step
+          # feeds straight into `docker compose cp` to grep the facts.
+          python -m cli run --scan_dirname ./formbricks --ignore_testing_code true --with_agent 2>&1 | tee formbricks_scan.log
+          kb_path=$(awk -F 'kb filename: ' 'NF>1{print $2}' formbricks_scan.log | awk '{print $1}' | tail -n 1)
+          if [ -z "$kb_path" ]; then
+            echo "could not extract kb filename from scan log"
             exit 1
           fi
+          echo "formbricks_kb_path=$kb_path" >> "$GITHUB_ENV"
+
+      - name: assert new auth-function facts on formbricks KB
+        run: |
+          # Fetch the KB the queryengine just wrote for the formbricks scan
+          # and verify every expected fact for the "early return null on
+          # missing request header value" authenticating gate is present.
+          # See tests/expected/facts/formbricks/auth_functions.txt for the
+          # exact facts + anchor code region ( apps/web/app/api/v1/auth.ts:8-9 ).
+          # Guards the two new kbgen extractors ( kb_gated_return/2 and
+          # kb_const_null/1 ) plus the corroborating call-site context.
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          echo "copying KB from queryengine:${formbricks_kb_path}"
+          $compose cp "queryengine:${formbricks_kb_path}" ./formbricks_kb.pl
+          echo "KB lines: $(wc -l < formbricks_kb.pl)"
+          missing=0
+          total=0
+          while IFS= read -r expected || [ -n "$expected" ]; do
+            expected=$(printf '%s' "$expected" | tr -d '\r')
+            [ -z "$expected" ] && continue
+            case "$expected" in \#*) continue ;; esac
+            total=$((total + 1))
+            if grep -Fqx "$expected" formbricks_kb.pl; then
+              echo "  OK  : $expected"
+            else
+              echo "  MISS: $expected"
+              missing=$((missing + 1))
+            fi
+          done < tests/expected/facts/formbricks/auth_functions.txt
+          echo "checked=$total missing=$missing"
+          if [ "$missing" -gt 0 ]; then
+            echo "FAILED: $missing expected auth-function fact(s) missing from KB"
+            exit 1
+          fi
+          rm -f formbricks_kb.pl
 
       - name: remove formbricks tested code
         run: rm -rf formbricks
