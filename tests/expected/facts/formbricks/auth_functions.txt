@@ -1,0 +1,26 @@
+# Expected KB facts for the "early return null on missing request header value"
+# authenticating-function gate detected in formbricks v3.16.0 at:
+#
+#     apps/web/app/api/v1/auth.ts:8-9
+#
+#         const apiKey = request.headers.get("x-api-key");   // line 8
+#         if (!apiKey) return null;                          // line 9
+#
+# The five facts below jointly satisfy every conjunct of
+#   utils_early_return_null_on_missing_request_header_value( Callable, KeyName )
+# in dhscanner.service.queryengine/utils.pl :
+#
+#   1. kb_call_resolved   : the header get call is resolved to nodejs.Request.headers.get
+#   2. kb_arg_i_for_call  : the header call's arg 0 (the key) is wired
+#   3. kb_const_string    : that arg is the compile-time literal 'x-api-key'
+#   4. kb_gated_return    : an empty-else if-then-return diamond ties (Cond=apiKey defn) to (Ret=null)
+#   5. kb_const_null      : the returned value is a null literal
+#
+# Lines starting with '#' and blank lines are ignored by the CI checker.
+# Every remaining line must appear verbatim in the queryengine's KB file.
+
+kb_call_resolved( startloc_8_18_endloc_8_50_apps_slash_web_slash_app_slash_api_slash_v1_slash_auth_dot_ts, 'nodejs.Request.headers.get' ).
+kb_arg_i_for_call( startloc_8_38_endloc_8_49_apps_slash_web_slash_app_slash_api_slash_v1_slash_auth_dot_ts, 0, startloc_8_18_endloc_8_50_apps_slash_web_slash_app_slash_api_slash_v1_slash_auth_dot_ts ).
+kb_const_string( startloc_8_38_endloc_8_49_apps_slash_web_slash_app_slash_api_slash_v1_slash_auth_dot_ts, 'x-api-key' ).
+kb_gated_return( startloc_8_9_endloc_8_15_apps_slash_web_slash_app_slash_api_slash_v1_slash_auth_dot_ts, startloc_9_23_endloc_9_27_apps_slash_web_slash_app_slash_api_slash_v1_slash_auth_dot_ts ).
+kb_const_null( startloc_9_23_endloc_9_27_apps_slash_web_slash_app_slash_api_slash_v1_slash_auth_dot_ts ).
