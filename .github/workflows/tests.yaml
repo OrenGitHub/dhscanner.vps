@@ -157,5 +157,47 @@ jobs:
           fi
           rm -f formbricks_kb.pl
 
+      - name: assert HTTP-response const-int facts on formbricks KB
+        run: |
+          # Guards the TS const-int fix ( frontts NumericLiteral case +
+          # TsParser.y exp_int INT capture ). Pre-fix, every one of the
+          # ten `kb_const_int` facts for apps/web/app/lib/api/response.ts
+          # was emitted with the placeholder value 888 -- indistinguish-
+          # able from any other integer literal. Post-fix, each carries
+          # the actual HTTP status code ( 200, 400, 401, 403, 404, 405,
+          # 410, 429, 500 ). If any regresses to 888 ( or any other wrong
+          # value ) this step fails.
+          # See tests/expected/facts/formbricks/http_responses.txt for
+          # the exact facts + source anchors.
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          echo "copying KB from queryengine:${formbricks_kb_path}"
+          $compose cp "queryengine:${formbricks_kb_path}" ./formbricks_kb.pl
+          echo "KB lines: $(wc -l < formbricks_kb.pl)"
+          missing=0
+          total=0
+          while IFS= read -r expected || [ -n "$expected" ]; do
+            expected=$(printf '%s' "$expected" | tr -d '\r')
+            [ -z "$expected" ] && continue
+            case "$expected" in \#*) continue ;; esac
+            total=$((total + 1))
+            if grep -Fqx "$expected" formbricks_kb.pl; then
+              echo "  OK  : $expected"
+            else
+              echo "  MISS: $expected"
+              missing=$((missing + 1))
+            fi
+          done < tests/expected/facts/formbricks/http_responses.txt
+          echo "checked=$total missing=$missing"
+          if [ "$missing" -gt 0 ]; then
+            echo "FAILED: $missing expected HTTP-response const-int fact(s) missing from KB"
+            exit 1
+          fi
+          rm -f formbricks_kb.pl
+
       - name: remove formbricks tested code
         run: rm -rf formbricks

@@ -2396,6 +2396,15 @@ valid; they can proceed in parallel or be deferred until after Task D.*
 
 ### Task D — implement `authenticating_function_candidates/1` (Shape A)
 
+*Partially unblocked 2026-08-21 — the KB primitives that indicators
+2 + 3 hinge on (`kb_gated_return/2` + `kb_const_null/1`, tied together
+by the derived rule
+`utils_early_return_null_on_missing_request_header_value/2`) are now
+shipped and CI-guarded against `auth.ts:8-9`. Composition into the
+wrapper predicate + the remaining indicators (1, 4, 5, 6) is scoped in
+§"Next-session tasks (handoff 2026-08-21) — Task D continuation" below.
+This section stays for design context; do not re-derive.*
+
 Implement the first candidate-shaped predicate in the dhscanner KB,
 using formbricks's `authenticateRequest` as the reference target.
 One predicate, one shape (A), one reference codebase — scoped tight
@@ -2570,6 +2579,230 @@ Anything not in this file that the next session might need:
   summary — 2026-08-07 → 2026-08-10" above — but the transcript is
   there if a specific claim needs to be re-derived from first
   principles.
+
+---
+
+## Session summary — 2026-08-10 → 2026-08-21 (first auth-gate primitive shipped)
+
+*Added 2026-08-21. First implementation slice of Task D landed on
+branch `feature-auth-functions-guard-on-missing-request-header-values`.
+What was previously "Task D — all six indicators" is now unblocked at
+the KB layer: indicators 2 (header read) and 3 (null-return polarity)
+are backed by primitive facts, and a derived Prolog rule ties them
+together on the reference target. Remaining Task D indicators (1, 4,
+5, 6) and Task E (Shape B) still to do.*
+
+### What shipped
+
+Two new primitive KB facts (kbgen extractors, language-agnostic):
+
+- `kb_const_null(Loc)` — every absence literal (JS `null`, Python
+  `None`, Ruby `nil` — same predicate, since dhscanner lifts all
+  three to the same `Token.ConstNull` node). Mirrors the
+  pre-existing `kb_const_int`/`kb_const_string` extractors exactly.
+- `kb_gated_return(Cond, ReturnedValue)` — an if-then-return
+  diamond with an *empty else* and *exactly one* return in the
+  then-body (nested `if`s are welcome, only the return count is
+  gated). Emitted once per qualifying `Assume(_, True)` node.
+
+One derived Prolog rule (queryengine, uses only the above plus
+pre-existing call / arg / string / dataflow facts):
+
+- `utils_early_return_null_on_missing_request_header_value(Callable, KeyName)`
+  — succeeds on any callable that reads
+  `Request.headers.get('K')` and short-circuits with `null` when
+  the header is absent. Composes `kb_call_resolved` +
+  `kb_arg_i_for_call` + `kb_const_string` +
+  `kb_gated_return_null/1` + `utils_intra_dataflow_path`.
+
+CI regression guard (`.github/workflows/tests.yaml`):
+
+- Runs `formbricks@v3.16.0` end-to-end **in agent mode** (no SARIF
+  is produced or diffed — the CLI's `--with_agent` flag stops after
+  the queryengine writes the KB and reports its path on stdout).
+- Parses the reported KB path, `docker compose cp`s it out of the
+  queryengine container, and asserts by byte-exact `grep -Fxq`
+  that the five facts jointly satisfying the derived rule are
+  present at `apps/web/app/api/v1/auth.ts:8-9`.
+- Fixture: `tests/expected/facts/formbricks/auth_functions.txt`.
+  Header comment on the fixture walks through which of the five
+  facts corresponds to which conjunct of the derived rule.
+
+### Codegen change that made the gated-return extractor cheap
+
+The extractor needs the "then-block" of an if-statement, quickly,
+from the bitcode CFG. Naive: BFS from an `Assume(_, True)` —
+expensive on big functions because it walks the entire post-`if`
+tail of the function. Trick shipped in `dhscanner.bitcode` 1.0.17:
+`Cfg.parallelNormalCfgs` now anchors the diamond's join Nop at
+`entry cfg2` (the false-branch entry), which via `codeGenStmtIf`
+equals the if-statement's own `Location`. That gives us:
+
+- **O(1) empty-else check** — the sibling `Assume(_, False)`'s
+  single CFG successor is a Nop-at-if-loc iff the else is empty.
+- **Bounded then-block BFS** — start at `Assume(_, True)`, fence
+  at the join Nop, never expand past it. Per-Assume cost drops
+  from O(|reach(Assume)|) to O(|then-block|), so on a giant
+  function only the then-block is visited.
+
+Zero new IR constructs, one field-value change on an existing Nop
+— "effective minimalism." No `CodeGen.hs` touched; the location
+inheritance happens purely in `Cfg.hs`. Consumers that read the
+join Nop's Location (none exist today) would see the if-statement
+location, which is more informative than the previous synthetic
+value — a benign upgrade, not a break.
+
+### Where the code lives (submodule map for the next session)
+
+| repo | HEAD after this session | change |
+|---|---|---|
+| `dhscanner.bitcode` (Hackage) | `1.0.17` on `main` | join-Nop location retag in `Cfg.parallelNormalCfgs` |
+| `dhscanner.kbgen` (Hackage) | `1.1.0` on `main` | new `Kbgen.ConstNull` and `Kbgen.GatedReturn` (with `Cond`, `ReturnedValue`) types + `prologify` + smoke tests |
+| `dhscanner.core/dhscanner.service.codegen` | `main` | cabal dep bump to `dhscanner-bitcode >= 1.0.17` (no source change) |
+| `dhscanner.core/dhscanner.service.kbgen` | `main` | cabal dep bumps + new extractors `getConstNullsRelatedFacts` and `getGatedReturnFacts` (bounded BFS, see above) |
+| `dhscanner.core/dhscanner.service.queryengine` | `main` | cabal dep bumps + `:- discontiguous` decls in `template.pl` + `kb_gated_return_null/1` + `utils_early_return_null_on_missing_request_header_value/2` in `utils.pl` |
+| `dhscanner.runner` (this repo) | `feature-auth-functions-guard-on-missing-request-header-values` | CI step + fixture; formbricks scan now runs in `--with_agent` mode (KB only) |
+
+### What this unlocks for Task D
+
+Of the six Shape-A indicators from the 2026-08-10 handoff
+(§"The six structural indicators (Shape A — identity carrier)"
+above):
+
+- **Indicator 2** (header read) — primitive shipped. Just needs to
+  be bound inside the wrapper predicate.
+- **Indicator 3** (early-null on absent) — primitive shipped and
+  end-to-end verified on the reference target.
+- **Indicator 4** (nested-verifier call) — needs the
+  `utils_token_verifier` sketch from the 2026-08-07 transcript,
+  still unwritten.
+- **Indicator 5** (early-null on verifier result) — reuses
+  `kb_gated_return_null/1` *as-is*, just linked to a different
+  dataflow endpoint (the verifier's return, not the header read).
+  No new kbgen work.
+- **Indicators 1 + 6** — need the type-facts and return-dataflow
+  prereqs from the 2026-08-10 "Prerequisites — KB capability
+  checks" list. Not yet audited against the running KB.
+
+**Load-bearing observation.** The same `kb_gated_return` +
+`kb_const_null` pair covers indicator 3 (input-side gate) *and*
+indicator 5 (verifier-side gate) with zero new fact types — only
+the dataflow endpoint that the derived rule insists on changes
+between the two. This is the "gate shape, plus one dataflow
+endpoint" pattern sketched for Shape B in the 2026-08-10
+characterization; it generalizes verbatim to Shape A's two gates.
+Reuse budget for the remaining Task D work is therefore high.
+
+---
+
+## Next-session tasks (handoff 2026-08-21) — Task D continuation
+
+*Persisted 2026-08-21 for the next session's opening. Task D from
+the 2026-08-10 handoff is unblocked at the KB layer (see §"Session
+summary — 2026-08-10 → 2026-08-21" above). This handoff picks up
+from there. Task E (Shape B middleware guard) is intentionally still
+parked — its blocking dependency (the `responses`-catalog kbgen
+extraction from the 2026-08-10 characterization) is unrelated to
+Task D's remaining work.*
+
+### Task D.2 — compose the remaining indicators into the wrapper predicate
+
+Order of operations, easiest to hardest:
+
+1. **Audit the KB-capability prerequisites** from the 2026-08-10
+   handoff (§"Prerequisites — KB capability checks (do BEFORE
+   writing the predicate)" above). Several are load-bearing for
+   indicators 1, 4, 6:
+    - `kb_param_type_fqn/3` (indicator 1)
+    - object-field dataflow (`x → { field: x }`) — critical for
+      indicator 4's Prisma `where: { hashedKey }` and for
+      indicator 6's return-object flow
+    - `kb_may_return_null/1` (indicator 6)
+2. **Write `utils_token_verifier/1`** — Prisma-only for now
+   (`prisma.apiKey.findUnique`/`findFirst` per the tier-1 leaves
+   in §"Seven auth idioms → three tier-1 leaves" above). Sketch
+   in the 2026-08-07 agent transcript.
+3. **Compose `authenticating_function_candidates/1`** — pair the
+   shipped
+   `utils_early_return_null_on_missing_request_header_value/2`
+   (indicators 2 + 3) with the new `utils_token_verifier/1` calls
+   (indicator 4), a second application of `kb_gated_return_null/1`
+   over the verifier-return dataflow endpoint (indicator 5), plus
+   type-facts (indicator 1) and return-dataflow (indicator 6).
+   Return both strictness levels per the 2026-08-10 handoff
+   (§"Strictness levels — return both").
+4. **Extend the CI fixture** — add rows for the v2 variant
+   (`.../modules/api/v2/auth/authenticate-request.ts`) and the
+   negative controls (`getApiKeyWithPermissions`, `checkAuth`,
+   `hashApiKey`, ~5 non-auth functions from
+   `.../lib/response/service.ts`) per the 2026-08-10 test
+   criteria. Same fixture format —
+   `tests/expected/facts/formbricks/`; new file per predicate.
+
+### Reuse budget for step 3
+
+- `kb_gated_return_null/1` is generic over which value gets
+  returned-if-null; indicator 5 wires it to the verifier's return
+  where indicator 3 wires it to the header-read result. No kbgen
+  work.
+- `utils_intra_dataflow_path/3` already exists; the new rule just
+  needs different endpoints per indicator.
+- The CI step's KB-copy-out-of-container plumbing is now boilerplate;
+  the second predicate's guard is roughly a copy of the first
+  with a different fixture path.
+
+### Files the new session should read (in this order)
+
+1. `AGENTS.md` at the repo root.
+2. This file — start at §"Session summary — 2026-08-10 → 2026-08-21"
+   for the current KB-primitive baseline, then §"Task D — implement
+   `authenticating_function_candidates/1` (Shape A)" for the design
+   spec (partially unblocked, still authoritative for the
+   remaining indicators), then §"Prerequisites — KB capability
+   checks (do BEFORE writing the predicate)" for the prereqs
+   audit.
+3. `dhscanner.core/dhscanner.service.queryengine/utils.pl` — where
+   the new predicate goes; see how
+   `utils_early_return_null_on_missing_request_header_value/2` is
+   composed for the house style.
+4. `dhscanner.core/dhscanner.service.kbgen/src/Factify.hs` — where
+   any new kbgen extractors go; see `getGatedReturnFacts` for the
+   bounded-BFS shape.
+5. `../formbricks/apps/web/app/api/v1/auth.ts` — the reference
+   target (~55 lines).
+
+### What the new session should NOT do
+
+- **Do not re-derive Task D design** — it's captured above at both
+  characterization and handoff level. If a specific decision seems
+  wrong, cross-check against the 2026-08-07 → 2026-08-10 session
+  transcript before overriding.
+- **Do not rework the shipped kbgen extractors** — they're on
+  Hackage as of 1.0.17 / 1.1.0 and CI-pinned. Any downstream fix
+  goes in the queryengine's Prolog layer or in a *new* kbgen fact,
+  not in a mutation of the existing two.
+- **Do not touch the `formbricks.sarif.json` fixture** — it's no
+  longer referenced by CI (formbricks now runs in agent mode) but
+  is left in place for provenance. Delete only if a specific
+  reason emerges.
+- **Do not conflate Shape A with Shape B** — see §"Two-tier
+  predicate contract" and §"What was decided" in the 2026-08-10
+  characterization. Task E is separate.
+
+### Where this session's state lives
+
+- **Session transcript (2026-08-10 → 2026-08-21)** — the full
+  turn-by-turn reasoning behind the `kb_gated_return` /
+  `kb_const_null` factoring decisions, the empty-else / single-return
+  invariant choice, the "effective minimalism" join-Nop-location
+  trick, the two-tier CI shape decision (Shape A: grep-the-KB), and
+  the shell-escaping / CRLF issues that surfaced during the CI
+  wire-up lives in the agent-transcripts folder. Reconstruction
+  should not be needed — everything load-bearing is in §"Session
+  summary — 2026-08-10 → 2026-08-21" above.
+- **Merged PR** — TBD; the branch above is what CI is passing
+  against as of 2026-08-21 morning. Link this section from the PR
+  description when it's opened.
 
 ---
 
