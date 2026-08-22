@@ -1,0 +1,43 @@
+# Expected KB facts for the HTTP status-code constants defined in
+# formbricks v3.16.0 at:
+#
+#     apps/web/app/lib/api/response.ts
+#
+# This file is the response catalog used across the formbricks API
+# handlers -- each `*Response` factory returns a `Response.json(...)`
+# with a hard-coded numeric status. Pre-fix, every one of these ten
+# `kb_const_int` facts was emitted with the placeholder value `888`
+# instead of the actual literal, because the frontts service dropped
+# the digit text for `NumericLiteral` / `FirstLiteralToken` nodes and
+# the parser's `exp_int` rule always returned `Ast.ExpInt 888`.
+#
+# The two-file fix (this PR):
+#
+#   1. dhscanner.service.fronts/ts/parser.ts -- add a `NumericLiteral`
+#      case that emits `Math.trunc(Number(node.text))` inside the
+#      parens (mirroring the existing `StringLiteral` / `Identifier`
+#      cases). Normalizes hex / scientific / underscore-separator
+#      forms to a plain decimal integer so Alex's `@INT = @DIGIT+`
+#      keeps working.
+#   2. dhscanner.service.parsers/src/TsParser.y -- `exp_int` rule
+#      widened from `'FirstLiteralToken' loc '(' ')'` to
+#      `'FirstLiteralToken' loc '(' INT ')'`, threading the captured
+#      `tokIntValue $4` into `Token.ConstInt` in place of `888`.
+#
+# The ten facts below cover every responder in the catalog. Every
+# previously-`888` value now carries the correct HTTP status code.
+# If any regresses to `888` (or any other wrong value), CI fails.
+#
+# Lines starting with '#' and blank lines are ignored by the CI checker.
+# Every remaining line must appear verbatim in the queryengine's KB file.
+
+kb_const_int( startloc_52_15_endloc_52_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 410 ).
+kb_const_int( startloc_76_15_endloc_76_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 400 ).
+kb_const_int( startloc_102_15_endloc_102_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 405 ).
+kb_const_int( startloc_129_15_endloc_129_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 404 ).
+kb_const_int( startloc_150_15_endloc_150_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 401 ).
+kb_const_int( startloc_169_15_endloc_169_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 401 ).
+kb_const_int( startloc_193_15_endloc_193_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 403 ).
+kb_const_int( startloc_210_15_endloc_210_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 200 ).
+kb_const_int( startloc_233_15_endloc_233_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 500 ).
+kb_const_int( startloc_256_15_endloc_256_18_apps_slash_web_slash_app_slash_lib_slash_api_slash_response_dot_ts, 429 ).
