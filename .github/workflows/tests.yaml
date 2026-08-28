@@ -255,7 +255,25 @@ jobs:
           # these ( `_defined_in_file/3` and `_defined_in_dir/3` ) as
           # dynamic, but we redeclare defensively here for standalone
           # swipl invocations that don't go through `template.pl`.
-          query="dynamic(kb_callable_returns_without_value/2), \
+          #
+          # `set_prolog_flag(character_escapes, false)` : disables Prolog's
+          # ISO-standard backslash-escape processing inside quoted atoms
+          # when reading source. The formbricks KB contains `kb_const_string`
+          # facts whose atoms hold user-source string literals verbatim --
+          # including regex fragments like `'\d+'` and JSON-path pieces
+          # like `'foo\/bar'`. Under the default flag SWI-Prolog 9 rejects
+          # those as `Unknown character escape` syntax errors and drops
+          # the offending clauses ; a partial KB then silently under-reports
+          # matches ( eg the previous CI run reported MATCH_COUNT: 0 after
+          # three `\d` / `\/` errors ). Disabling escapes makes every
+          # backslash a literal character, so every emitted clause loads
+          # regardless of which language / framework the atoms came from.
+          # Safe for `utils.pl` : that file uses `\+` ( negation-as-failure
+          # operator ) not `\<char>` escapes, so its parse is unaffected.
+          # Long-term this should move upstream to kbgen ( proper backslash
+          # doubling on emit ), at which point this line can be removed.
+          query="set_prolog_flag(character_escapes, false), \
+                 dynamic(kb_callable_returns_without_value/2), \
                  dynamic(kb_call_1st_party_func_defined_in_file/3), \
                  dynamic(kb_call_1st_party_func_defined_in_dir/3), \
                  dynamic(kb_func_def/4), \
