@@ -16,7 +16,7 @@ services:
       - dhscanner
   
   queryengine:
-    image: orenishdocker/dhscanner-queryengine:1.0.44-x64
+    image: orenishdocker/dhscanner-queryengine:1.0.46-x64
     ports:
       - 3000:3000
     networks:
