@@ -2806,6 +2806,484 @@ Order of operations, easiest to hardest:
 
 ---
 
+## Session summary — 2026-08-22 → 2026-08-23 (capability-pair paradigm + Shape B unblock + URL-emitter recognizer)
+
+*Added 2026-08-23. Captures the design decisions from a session
+focused on the LLM ↔ KB **interaction shape** of the OWASP live
+segment. Three orthogonal things get pinned down: (a) the trace of
+turns that becomes the demo, (b) the three-way tier-1 taxonomy that
+lets the KB label capability gates as a class distinct from authN /
+authZ / input validation, and (c) the URL-emitter recognizer that
+turns emitted "redirect" URLs into follow-on queries. Also captures
+the empirical formbricks survey (8 capability pairs) that grounds the
+generality claim.*
+
+### The demo arc is a chain of turns (not a monolithic query)
+
+The 12-turn LLM ↔ KB trace from this session is the OWASP live
+segment. Six exchanges, six decisions, one BINGO, plus a closing
+pair-level turn. The moves that make it substantively differentiate
+from Semgrep/CodeQL:
+
+1. **Negative-result pivot** — unauth POST enumeration returns
+   nothing exploitable; the loop budget-shifts to authenticated
+   endpoints. A monolithic query has no branch point on "empty
+   result."
+2. **Metadata-driven query composition** — the LLM reads URL literals
+   from the previous KB response and asks about *those* URLs
+   specifically. Tier-2b in one turn.
+3. **Locality-based ranking** — five sinks returned; the LLM picks
+   one before spending the expensive `DataFlowPath` budget. Semantic
+   ranking on file-path structure.
+
+Plus a closing pair-level turn (13-14) that re-runs the trace against
+H1's signer side so contribution 1 (pair-level cooperation analysis)
+lands, not just single-flow taint. Without turn 13-14 an audience
+member can reasonably say *"CodeQL already finds turn 12."*
+
+### Reachability is dynamic — capability endpoints are hidden by design
+
+H2 is authN-passing (same session + envAccess as H1) but is NOT
+directly reachable — it's gated by a capability verifier
+(`validateLocalSignedUrl`) whose satisfying witness is minted only by
+its paired generator (`generateLocalSignedUrl`, called from H1). Load-
+bearing design decision:
+
+> `AuthenticatedHttpPostHandlerRequestObject` **filters out
+> capability-gated endpoints.** H2 does not appear in turn 6. It
+> becomes tracked by the loop only after turn 8 emits the URL
+> pointing at it.
+
+Reachability is a loop-side property, not a static KB fact. The KB
+labels endpoints as capability-gated; the loop *unlocks* them as
+URLs pointing at them are discovered. This is what makes the
+exploration feel like unlocking a game, not searching a lookup
+table.
+
+### The three-way tier-1 taxonomy (authN + authZ + capability)
+
+The demo doc's §"Terminology — three orthogonal questions, do not
+conflate" already commits to three orthogonal gate kinds. This
+session extends the tier-1 catalog architecture to match — one leaf
+list per gate kind, plus the wrappers derived by turtles-all-the-way-
+down:
+
+| Kind | Question | Tier-1 leaves | Wrapper example in formbricks |
+|---|---|---|---|
+| authN | who are you? | `next-auth.getServerSession`, `prisma.apiKey.findFirst` | `authenticateRequest` |
+| authZ | may this identity do X? | `prisma.membership.findFirst` (via `hasUserEnvironmentAccess`) | `checkAuth`'s inner branches |
+| **capability** | is this *specific action* pre-blessed? | `crypto.timingSafeEqual`, `jose.jwtVerify`, `jsonwebtoken.verify`, `crypto.createHmac` compares | `validateLocalSignedUrl` |
+
+Every early-return-4xx gate has the same structural shape
+(`if (!validator(...)) return responses.<bad>()`). What
+disambiguates the *kind* of gate is a single conjunct — *which tier-1
+leaf the validator transitively reaches*. Same recognizer, three
+answers.
+
+**Input validation is what falls out.** `validateFile` in
+`apps/web/lib/fileValidation.ts` has the exact same gate shape but
+its validator reaches only string operations (`String.split`, MIME
+table lookup, Zod schema) — no tier-1 leaf. It correctly does not
+fire on any of the three security-gate recognizers.
+
+### The capability-pair discriminator is *cross-handler*
+
+Some capability leaves self-label (JWT verify/sign are almost always
+capabilities). Others don't (`crypto.timingSafeEqual` is used for
+password compare, CSRF, API-key compare, capability verify). The
+load-bearing disambiguator for low-signal leaves is the **cross-
+handler pairing constraint**:
+
+- **Password compare** — no generator handler (the "sign side" is a
+  DB write at registration time, not a per-request signature).
+- **CSRF token check** — generator is typically same-handler
+  (middleware sets the token in the response the verifier reads on
+  the next request).
+- **API-key compare** — no generator per se (admin-flow DB write,
+  not a per-request signature).
+- **Capability verify** — generator is *another handler that returns
+  the signature in its response body*. Only capability has this
+  shape.
+
+Prolog form:
+
+```prolog
+utils_capability_pair(GenHandler, VerHandler) :-
+    utils_capability_verifier(VerHandler),
+    utils_capability_generator(GenHandler),
+    GenHandler \= VerHandler,
+    utils_matching_crypto_family(GenLeaf, VerLeaf).
+```
+
+**The cross-handler predicate is the load-bearing conjunct.** Without
+it, `timingSafeEqual` fires everywhere. With it, only the H1/H2
+shape survives.
+
+### The `new URL(...)` anchor + typed segments + const-ratio ranking
+
+Handlers emit their "redirect" URLs through the `new URL(...)`
+constructor — which is a *typed* signal, stronger than a raw template
+literal. kbgen extracts:
+
+```
+kb_resolved_url_literal(Loc, [Segment1, Segment2, ...])
+```
+
+where each `Segment` is `const(<str>)` or `dynamic(<expr>)`. Then the
+LLM ranks candidates by **const-ratio** (count of `const` segments
+over total segments) — name-blind, structural.
+
+On H1's response body (4 emitted URLs), the top-2 by const-ratio are
+exactly the two capability endpoints (H2 public + H2' private); the
+bottom-2 are file-data URLs. Deterministic ranking, no name
+matching:
+
+| # | URL literal | Segments (const · dynamic) | Const-ratio | Points to |
+|---|---|---|---|---|
+| A | `${publicDomain}/api/v1/client/${envId}/storage/local` | 5 · 2 | **5/7** | H2′ (private capability endpoint) |
+| B | `${WEBAPP_URL}/api/v1/management/storage/local` | 5 · 1 | **5/6** | H2 (public capability endpoint) |
+| C | `${baseUrl}/storage/${envId}/${accessType}/${updatedFileName}` | 1 · 4 | 1/5 | file GET (data URL) |
+| D | same as C, S3 branch | 1 · 4 | 1/5 | file GET (data URL) |
+
+### N-hop return-value dataflow (turtles applied to URL emission)
+
+The URL literal isn't emitted directly by the handler — it's several
+call hops down (`route.ts` → `getSignedUrlForPublicFile` →
+`getUploadSignedUrl` → URL constructor). Same turtles principle as
+auth wrappers: the KB primitive is bounded return-value dataflow,
+and the kbapi response carries the **hop chain** with function
+names so the LLM can prioritize:
+
+- Short chain + descriptive names (`getSignedUrl*`) → high
+  confidence, follow.
+- Long chain + generic names (`format`, `helper`, `wrap`) →
+  deprioritize.
+
+Recommended bound: `maxHops = 4`. The seed pair (H1) is 2 hops;
+every JWT-based emitter in formbricks is 1 hop (URL constructed
+directly in the caller of `create*Token`).
+
+### Shape B (middleware guard) recognizer — Task E unblocked
+
+The 2026-08-10 characterization identified `checkAuth` as Shape B
+(middleware guard): all-but-one explicit returns are bad HTTP
+responses; the happy path is an *implicit fall-through*. Task E was
+parked pending the `responses`-catalog kbgen extraction. This
+session converts that into a concrete predicate design:
+
+```prolog
+utils_middleware_guard(F) :-
+    kb_callable_returns_value(F, _),
+    forall(kb_callable_returns_value(F, R),
+           utils_is_bad_http_response_value(R)),
+    kb_callable_falls_through(F).
+```
+
+Depends on two new kbgen facts
+(`kb_callable_returns_value(Callable, ReturnedValue)` — one row per
+explicit return; `kb_callable_falls_through(Callable)` — one row if
+the function can exit past its last statement) plus the
+`responses`-catalog kbgen extraction from the 2026-08-10 handoff
+(`kb_response_catalog` + `kb_response_status_hint`). All three ship
+together as Task E's kbgen batch.
+
+### Empirical generality inside formbricks — 8 capability pairs
+
+The single `utils_capability_pair` recognizer, driven by a ~6-row
+tier-1 crypto-leaf catalog (`createHmac`, `jwt.sign` / `verify` /
+`decode`, `timingSafeEqual`), fires **8 times** across 5 different
+features in formbricks. Same shape catches:
+
+| # | Purpose | Generator | Verifier | Consumer(s) | Crypto leaf |
+|---|---|---|---|---|---|
+| 1 | Signed upload (public) | `generateLocalSignedUrl` | `validateLocalSignedUrl` | `/api/v1/management/storage/local` | `createHmac` |
+| 2 | Signed upload (private) | same | same | `/api/v1/client/[envId]/storage/local` | `createHmac` |
+| 3 | Email-change token | `createEmailChangeToken` | `verifyEmailChangeToken` | `/verify-email-change` | `jwt.sign` / `verify` |
+| 4 | User verify / reset | `createToken` | `verifyToken` ⚠️ | `/auth/verify`, `/auth/forgot-password/reset` | `jwt.sign` / **`jwt.decode`** |
+| 5 | Invite token | `createInviteToken` | `verifyInviteToken` ⚠️ | `/invite` | `jwt.sign` / **`jwt.decode`** |
+| 6 | Email token | `createEmailToken` | `getEmailFromEmailToken` | `/auth/verification-requested` | `jwt.sign` / `verify` |
+| 7 | Link-survey token | `createTokenForLinkSurvey` | `verifyTokenForLinkSurvey` | public survey link | `jwt.sign` / `verify` |
+| 8 | Contact-survey token | `getContactSurveyLink` (embeds `jwt.sign`) | `verifyContactSurveyToken` | `/c/[token]` | `jwt.sign` / `verify` |
+
+Plus a cross-service capability worth documenting but where the pair
+predicate won't fire (verifier is off-repo): **Intercom user-hash**
+in `apps/web/app/intercom/IntercomClientWrapper.tsx` computes
+`createHmac("sha256", INTERCOM_SECRET_KEY).update(user.id).digest("hex")`
+inline; the paired verifier is on Intercom's servers.
+
+**Every one of the 8 has a paired URL emitter** of the shape
+`${BASE}/<verifier-path>?token=<token>` (or `/<token>`) — the
+"redirect" metadata the LLM reads in turn 8. Some emit multiple URLs
+from one generator call (H1's 4 URLs; the email-verify flow's 2
+URLs) — every one is a separate cooperation-pair candidate.
+
+### Bonus finding — `jwt.decode` masquerading as `verify*`
+
+Rows 4 and 5 in the table above are flagged ⚠️ because their
+"verifiers" don't actually verify. `verifyToken`
+(`apps/web/lib/jwt.ts:114-148`) and `verifyInviteToken` (same file,
+lines 150-178) call `jwt.decode(token)` — **not** `jwt.verify`.
+Signature validation is skipped entirely. `verifyToken` then does
+`prisma.user.findUnique({where: {id: decryptedId}})` — anyone can
+forge a token, decrypt-lookup, and impersonate.
+
+This is a *second* class of finding the same tier-1 catalog
+surfaces, via one extra Prolog line:
+
+```prolog
+utils_capability_verifier_broken(F) :-
+    kb_transitively_calls(F, 'jsonwebtoken.decode'),
+    \+ kb_transitively_calls(F, 'jsonwebtoken.verify').
+```
+
+**Two more findings for free.** Same tier-1 catalog investment.
+
+---
+
+## Next-session tasks (handoff 2026-08-23) — capability-pair + URL-emitter + Shape B
+
+*Persisted 2026-08-23 for the next session's opening. Three
+implementation tasks, each with a one-line pin, a concrete formbricks
+reference target, and a full list of the other in-repo examples that
+must ride along in the CI fixtures. Each task has effects across
+kbgen + queryengine + kbapi + CI — those are captured inline under
+"Prereqs to ship together." The Task D.2 continuation from
+2026-08-21 stays queued; some of its work composes with these tasks
+(indicator 5's `kb_gated_return_null` reuse generalizes to
+bad-response gates in Task F).*
+
+### Task E — label `checkAuth` as a middleware guard via all-but-one-bad-return
+
+**Pin.** *Recognize an authenticator whose every explicit return is a 4xx and whose happy path is an implicit fall-through.*
+
+**Reference target.** `checkAuth` in
+`apps/web/app/api/v1/management/storage/lib/utils.ts` — three
+explicit returns (`responses.notAuthenticatedResponse()`,
+`responses.unauthorizedResponse()` ×2), one implicit fall-through
+after the last `if`.
+
+**Prereqs to ship together:**
+
+- kbgen — `kb_callable_returns_value(Callable, ReturnedValue)`: one
+  row per explicit return statement in a callable's body.
+- kbgen — `kb_callable_falls_through(Callable)`: one row if the
+  function can exit past its last statement (implicit `undefined`).
+- kbgen — `kb_response_catalog(ObjectFqn, MemberName, MemberFqn)` +
+  `kb_response_status_hint(MemberFqn, StatusCode)`: the
+  `responses`-shorthand catalog from the 2026-08-10 characterization
+  (Task E's original blocker; ships here).
+- utils.pl — `utils_is_bad_http_response_value(R)`: R is a call to a
+  catalog member whose status hint is 4xx.
+- utils.pl — `utils_middleware_guard(F)`: composed recognizer.
+
+**CI fixtures:**
+
+- Positive: `checkAuth` in `storage/lib/utils.ts` fires.
+- Negative: `authenticateRequest` in `apps/web/app/api/v1/auth.ts`
+  does NOT fire — explicit success return, not a fall-through
+  (Shape A, not B).
+- Negative: `validateFile` in `apps/web/lib/fileValidation.ts` does
+  NOT fire — returns `{valid: bool}`, not a response.
+- Negative: any handler returning 200 on the happy path does NOT
+  fire.
+
+### Task F — support cryptographic verifiers (target: `validateLocalSignedUrl`)
+
+**Pin.** *Recognize functions that transitively reach a crypto-verifier leaf, and pair each with a cross-handler generator via a matching sign/verify crypto family.*
+
+**Reference target.** `validateLocalSignedUrl` in
+`apps/web/lib/crypto.ts` — wraps
+`createHmac("sha256", secret).update(data).digest("hex")` +
+constant-time compare via `!==`. Paired with `generateLocalSignedUrl`
+in the same file, reached transitively via
+`lib/storage/service.ts::getUploadSignedUrl` →
+`app/api/v1/management/storage/lib/getSignedUrl.ts::getSignedUrlForPublicFile`
+→ H1's `route.ts` (or H1's private-branch route file, for the
+sibling).
+
+**Other in-repo positive fixtures (must all fire on `utils_capability_pair/2`):**
+
+| # | Generator | Verifier | Defined in | Crypto family |
+|---|---|---|---|---|
+| 1 | `generateLocalSignedUrl` | `validateLocalSignedUrl` | `lib/crypto.ts` | HMAC |
+| 2 | (same) | (same) | (same, private-branch consumer at `/api/v1/client/[envId]/storage/local`) | HMAC |
+| 3 | `createEmailChangeToken` | `verifyEmailChangeToken` | `lib/jwt.ts` | JWT |
+| 4 | `createToken` | `verifyToken` ⚠️ | `lib/jwt.ts` | JWT (verifier uses `jwt.decode`) |
+| 5 | `createInviteToken` | `verifyInviteToken` ⚠️ | `lib/jwt.ts` | JWT (verifier uses `jwt.decode`) |
+| 6 | `createEmailToken` | `getEmailFromEmailToken` | `lib/jwt.ts` | JWT |
+| 7 | `createTokenForLinkSurvey` | `verifyTokenForLinkSurvey` | `lib/jwt.ts` | JWT |
+| 8 | `getContactSurveyLink` (embeds `jwt.sign`) | `verifyContactSurveyToken` | `modules/ee/contacts/lib/contact-survey-link.ts` | JWT |
+
+Plus **cross-service** capability (documented but pair predicate will
+correctly NOT fire — no in-repo verifier): Intercom user-hash in
+`app/intercom/IntercomClientWrapper.tsx` via inline `createHmac`.
+
+**Bonus positive fixtures on `utils_capability_verifier_broken/1`:**
+
+- `verifyToken` in `lib/jwt.ts:114-148` — reaches `jsonwebtoken.decode`,
+  never `jsonwebtoken.verify`. Broken capability check.
+- `verifyInviteToken` in `lib/jwt.ts:150-178` — same shape. Broken.
+
+**Prereqs to ship together:**
+
+- utils.pl — `utils_capability_verifier_leaf_fqn/1` catalog:
+  `crypto.timingSafeEqual`, `jose.jwtVerify`,
+  `jsonwebtoken.verify`, `crypto.createHmac` (verify-side compare).
+- utils.pl — `utils_capability_generator_leaf_fqn/1` catalog:
+  `crypto.createHmac` (sign side, `.update(...).digest(...)`),
+  `jose.SignJWT`, `jsonwebtoken.sign`.
+- utils.pl — `utils_matching_crypto_family(GenLeaf, VerLeaf)`: pairs
+  sign ↔ verify leaves (HMAC ↔ HMAC, JWT ↔ JWT).
+- utils.pl — `kb_transitively_calls(F, LeafFqn)`: bounded transitive
+  closure over `kb_call_resolved` + first-party call facts.
+  Not currently shipped as a named predicate; derive here.
+- utils.pl — `utils_capability_verifier(F)` /
+  `utils_capability_generator(F)`: wrapper recognizers via
+  `kb_transitively_calls`.
+- utils.pl — `utils_capability_pair(GenHandler, VerHandler)`: with
+  the load-bearing `GenHandler \= VerHandler` cross-handler
+  constraint (false-positive discriminator against password / CSRF
+  / API-key single-handler uses of `timingSafeEqual`).
+- utils.pl — `utils_early_return_bad_response_on_falsy_verifier(H, VerFqn)`:
+  sibling of the shipped
+  `utils_early_return_null_on_missing_request_header_value/2`.
+  Reuses `kb_gated_return`; needs Task E's `kb_response_catalog` +
+  `kb_response_status_hint`.
+- utils.pl — `utils_capability_verifier_broken(F)`: the `jwt.decode`
+  bonus predicate.
+- kbapi — refine `AuthenticatedHttpPostHandlerRequestObject` to
+  **exclude** capability-gated handlers (so H2 doesn't appear in
+  turn 6 — see §"Reachability is dynamic" in the session summary
+  above). Alternative shape: add a sidecar
+  `CapabilityGatedHttpPostHandlerRequestObject` tag that the LLM
+  harness only opens after turn 8 unlocks it.
+
+### Task G — support URL-generating functions (target: `getUploadSignedUrl`)
+
+**Pin.** *Recognize handlers that emit URL literals via `new URL(...)`, rank by const-part ratio, expose the N-hop return-value dataflow with function names so the LLM can decide whether to follow.*
+
+**Reference target.** `getUploadSignedUrl` in
+`apps/web/lib/storage/service.ts` — emits **4 URLs** via
+`new URL(...).href` in its response object:
+
+- `${publicDomain}/api/v1/client/${envId}/storage/local` (H2′ private
+  capability endpoint, const-ratio 5/7).
+- `${WEBAPP_URL}/api/v1/management/storage/local` (H2 public
+  capability endpoint, const-ratio 5/6).
+- `${baseUrl}/storage/${envId}/${accessType}/${updatedFileName}`
+  (file GET data URL, const-ratio 1/5).
+- Same file-GET URL from the S3-branch return object.
+
+Called via a **2-hop chain**: H1's `route.ts` →
+`getSignedUrlForPublicFile` (`.../storage/lib/getSignedUrl.ts`) →
+`getUploadSignedUrl` → URL literal. Hop chain names all
+descriptive; the LLM should follow (`getSignedUrl*` is a strong
+semantic signal).
+
+**Other in-repo positive fixtures (must all fire with hop-chain metadata):**
+
+| # | Emitter | Emitted URL(s) | Where emitted | Hops |
+|---|---|---|---|---|
+| 1 | `getUploadSignedUrl` (via H1's `route.ts`) | 4× URLs (public / private / fileUrl ×2) | HTTP response body | 2 |
+| 2 | `sendVerificationNewEmail` (`modules/email/index.tsx`) | `${WEBAPP_URL}/verify-email-change?token=…` | email body (`EmailButton href`) | 1 |
+| 3 | `sendVerificationEmail` (`modules/email/index.tsx`) | 2× URLs: `/auth/verify?token=…` + `/auth/verification-requested?token=…` | email body | 1 |
+| 4 | `sendForgotPasswordEmail` (`modules/email/index.tsx`) | `${WEBAPP_URL}/auth/forgot-password/reset?token=…` | email body | 1 |
+| 5 | `sendInviteEmail` (`modules/email/index.tsx`) | `${WEBAPP_URL}/invite?token=…` | email body | 1 |
+| 6 | `createInviteTokenAction` (`modules/organization/settings/teams/actions.ts`) | token returned; client constructs URL | HTTP action response | 1 |
+| 7 | `createEmailTokenAction` (`modules/auth/actions.ts`) | token returned; client constructs `/auth/verification-requested?token=…` | HTTP action response | 1 |
+| 8 | `getContactSurveyLink` (`modules/ee/contacts/lib/contact-survey-link.ts`) | `${publicDomain}/c/${token}` | HTTP response body | 1 |
+
+**Prereqs to ship together:**
+
+- kbgen — `kb_resolved_url_literal(Loc, Segments)`: anchor is
+  `new URL(<arg>)`. Segments extracted from the template literal
+  passed as arg 0, typed as `const(<str>)` or `dynamic(<expr>)`.
+  Pure AST extractor, no evaluation.
+- kbgen — `kb_return_dataflow_path(Handler, ExprLoc, HopChain)`:
+  bounded (recommended `maxHops = 4`), return-value-only (each
+  hop must flow the value into its own return, not just be
+  reachable in the body).
+- utils.pl —
+  `utils_url_literal_returned_from_handler(H, UrlLoc, Segments, HopChain)`:
+  composes the two.
+- kbapi — new tag `EmittedUrlLiteralsFromHandler` with response
+  fields `{ urlLoc, segments, constRatio, hopChain (list of
+  {name, loc}), hopCount }`. This is what turn 8 in the trace
+  consumes.
+- kbapi — optional companion tag `HandlerAtUrlSegments` that takes
+  a segments list from `kb_resolved_url_literal` and returns the
+  handler whose route matches. This completes turn 8 → 9 in the
+  trace (the LLM follows the emitted URL to its verifier
+  endpoint).
+
+**CI fixtures:** positives = all 8 emitters above with their
+respective URLs + hop counts + const-ratios; negatives = handlers
+that build URLs via plain string concatenation without `new URL(...)`
+should NOT fire (the typed anchor is load-bearing).
+
+### Files the new session should read (in this order)
+
+1. `AGENTS.md` at the repo root.
+2. This file — start at §"Session summary — 2026-08-22 → 2026-08-23"
+   above for the design context of all three tasks + the empirical
+   grounding (8 pairs).
+3. `dhscanner.core/dhscanner.service.queryengine/utils.pl` — house
+   style for the new predicates; see how the shipped
+   `utils_early_return_null_on_missing_request_header_value/2` and
+   `utils_function_returns_bad_http_response_ts_401/_403/_404` are
+   composed.
+4. `dhscanner.core/dhscanner.service.kbgen/src/Factify.hs` (or its
+   Kbgen counterparts) — house style for the new kbgen extractors;
+   see how `getGatedReturnFacts` uses the bounded-BFS trick from
+   the 2026-08-21 session.
+5. `dhscanner.packages/dhscanner.kbapi/src/Content.hs` +
+   `Kbapi.hs` — house style for the new kbapi tags; see how
+   `FoundAuthenticatedHttpPostHandlerRequestObjectMatch` carries
+   structured metadata for LLM consumption.
+6. `../formbricks/apps/web/lib/crypto.ts` (55 lines) — Task F's
+   reference target.
+7. `../formbricks/apps/web/lib/storage/service.ts` +
+   `.../storage/lib/getSignedUrl.ts` — Task G's reference target
+   and its 2-hop chain.
+8. `../formbricks/apps/web/app/api/v1/management/storage/lib/utils.ts`
+   — Task E's reference target (`checkAuth`, ~25 lines).
+
+### What the new session should NOT do
+
+- **Do not re-derive Task D design** — the shipped Task D.1 primitives
+  (`kb_const_null` / `kb_gated_return` / the
+  `utils_early_return_null_on_missing_request_header_value/2` rule)
+  are on Hackage and CI-pinned as of 2026-08-21. Task D.2 remaining
+  (indicators 1, 4, 5, 6 for Shape A + `utils_token_verifier`)
+  composes with Tasks E–G but is scoped separately.
+- **Do not tag `validateLocalSignedUrl` or `checkAuth` by name** —
+  turtles all the way down. Tag the crypto leaves + gate shapes;
+  the wrappers fall out of transitive reachability.
+- **Do not fold input-validation leaves into any of the three
+  security-gate catalogs** — the whole point of the three-way
+  taxonomy is that input validation is what's *left over* when no
+  tier-1 leaf is reached. Tagging `validateFile`'s inner leaves
+  (Zod / `String.split` / MIME table) would collapse the
+  discriminator.
+- **Do not conflate Shape A with Shape B or with capability gates**
+  — they share the early-return-4xx skeleton but differ in return
+  shape (T-carrier vs implicit-fall-through), leaf catalog, and
+  polarity. All three ship as sibling recognizers.
+
+### Where this session's state lives
+
+- **Session transcript (2026-08-22 → 2026-08-23)** — the full
+  turn-by-turn reasoning behind the twelve-turn trace design, the
+  three-way tier-1 taxonomy, the cross-handler pair discriminator,
+  the const-ratio ranking, the 8-pair survey, and the `jwt.decode`
+  bonus lives in the agent-transcripts folder. Reconstruction should
+  not be needed — everything load-bearing is in §"Session summary
+  — 2026-08-22 → 2026-08-23" above.
+- **Merged PR** — TBD. Link this section from the PR description
+  when it's opened.
+
+---
+
 ## Cross-references
 
 - `docs/GOAL.md` — the OWASP 2026 north star this file serves.
