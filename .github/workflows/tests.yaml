@@ -199,5 +199,91 @@ jobs:
           fi
           rm -f formbricks_kb.pl
 
+      - name: assert shape recognizer detects checkAuth authenticating function
+        run: |
+          # Runs `utils_authenticating_function_by_return_values/1` from the
+          # queryengine's baked-in utils.pl against the formbricks KB the
+          # earlier step just generated. The predicate recognises middleware-
+          # guard-shaped callables by their return-values shape (N bad-http
+          # returns + 1 parser-injected fall-through); see the utils.pl
+          # comment block for the full design (no `forall`, enumerated
+          # 1v1/2v1/3v1/4v1 arities).
+          #
+          # This step is the end-to-end sensor for FOUR moving parts landing
+          # together:
+          #   1. parser  : `expArrowFunction` -> `ensureCallableBodyEndsWithReturn`
+          #                (`TsParserActions.hs`) -- gives arrow-function
+          #                callables their synthetic fall-through return.
+          #   2. kbgen   : `kb_callable_returns_value/2` (and `_without_value/2`)
+          #                -- emits one fact per return path per callable.
+          #   3. utils.pl: `utils_authenticating_function_by_return_values/1`
+          #                + the 1-hop wrapper case
+          #                (`utils_return_value_is_bad_http_response_via_1st_party_wrapper/1`)
+          #                -- pattern-matches the shape and follows
+          #                `responses.notAuthenticatedResponse()` /
+          #                `responses.unauthorizedResponse()` down one hop.
+          #   4. compose : parsers >= 1.1.17-x64 and queryengine >= 1.0.47-x64
+          #                are pinned in `compose.prebuilt.yaml`.
+          #
+          # Regression protection : if ANY of the four regresses, this step
+          # fails. The predicate is derived (not a raw KB fact), so we
+          # execute it inside the queryengine container's swipl rather than
+          # grepping the extracted KB.
+          #
+          # Assertion : at least one callable in checkAuth's source file
+          # (`apps/web/app/api/v1/management/storage/lib/utils.ts`, encoded
+          # per kbgen's `_slash_`/`_dot_` convention) matches the shape
+          # predicate. In formbricks v3.16.0 the only match today is
+          # `checkAuth` itself; `checkForRequiredFields` in the same file
+          # uses status 400 which is not in the current bad-code catalog
+          # (401/403/404). The "at least one" phrasing keeps the test
+          # stable under future leaf-additions to the catalog (400/405/500/
+          # ...).
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          file_marker='apps_slash_web_slash_app_slash_api_slash_v1_slash_management_slash_storage_slash_lib_slash_utils_dot_ts'
+          echo "querying queryengine's swipl for shape-recognized callables in file marker: $file_marker"
+          # `dynamic/1` calls declare potentially-empty kb_* predicates as
+          # known-but-clauseless so that referencing them in the shape
+          # predicate ( eg `\+ kb_callable_returns_without_value(F, _)` )
+          # cleanly FAILS instead of throwing "Unknown procedure". The
+          # queryengine's production `template.pl` already declares two of
+          # these ( `_defined_in_file/3` and `_defined_in_dir/3` ) as
+          # dynamic, but we redeclare defensively here for standalone
+          # swipl invocations that don't go through `template.pl`.
+          query="dynamic(kb_callable_returns_without_value/2), \
+                 dynamic(kb_call_1st_party_func_defined_in_file/3), \
+                 dynamic(kb_call_1st_party_func_defined_in_dir/3), \
+                 dynamic(kb_func_def/4), \
+                 dynamic(kb_called_from/2), \
+                 consult('/queryengine/utils.pl'), \
+                 consult('${formbricks_kb_path}'), \
+                 findall(F, ( utils_authenticating_function_by_return_values(F), \
+                              sub_atom(F, _, _, _, '${file_marker}') ), Fs), \
+                 length(Fs, N), \
+                 format('MATCH_COUNT: ~w~n', [N]), \
+                 forall( member(F, Fs), format('MATCH: ~q~n', [F]) ), \
+                 Fs = [_|_], \
+                 halt(0)"
+          set +e
+          $compose exec -T queryengine swipl -g "$query" -t "halt(1)" | tee shape_query.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "FAIL: shape predicate returned no matches in checkAuth's source file"
+            exit 1
+          fi
+          if ! grep -q "^MATCH:" shape_query.log; then
+            echo "FAIL: no MATCH line in swipl output"
+            exit 1
+          fi
+          match_count=$(grep -c "^MATCH:" shape_query.log)
+          echo "PASS: shape recognizer matched $match_count callable(s) in checkAuth's source file"
+          rm -f shape_query.log
+
       - name: remove formbricks tested code
         run: rm -rf formbricks
