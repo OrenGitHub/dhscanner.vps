@@ -264,21 +264,33 @@ jobs:
           # like `'foo\/bar'`. Under the default flag SWI-Prolog 9 rejects
           # those as `Unknown character escape` syntax errors and drops
           # the offending clauses ; a partial KB then silently under-reports
-          # matches ( eg the previous CI run reported MATCH_COUNT: 0 after
-          # three `\d` / `\/` errors ). Disabling escapes makes every
-          # backslash a literal character, so every emitted clause loads
-          # regardless of which language / framework the atoms came from.
-          # Safe for `utils.pl` : that file uses `\+` ( negation-as-failure
-          # operator ) not `\<char>` escapes, so its parse is unaffected.
-          # Long-term this should move upstream to kbgen ( proper backslash
-          # doubling on emit ), at which point this line can be removed.
-          query="set_prolog_flag(character_escapes, false), \
+          # matches ( eg the first CI run of this step reported
+          # `MATCH_COUNT: 0` after three `\d` / `\/` errors ). Disabling
+          # escapes makes every backslash a literal character, so every
+          # emitted clause loads regardless of which language / framework
+          # the atoms came from. Long-term this should move upstream to
+          # kbgen ( proper backslash doubling on emit ), at which point
+          # this line can be removed.
+          #
+          # ORDER MATTERS : consult utils.pl BEFORE flipping the flag.
+          # `utils_1st_party_wrapper_helper/2` in utils.pl uses a
+          # `split_string(S, "\"", "", [_, FileStr, _, _, TailStr])` call
+          # to parse `kb_call_resolved`'s FirstPartyImport Haskell-Show
+          # atom -- the `"\""` string literal there IS an ISO escape (
+          # `\"` = single `"` character ) and depends on the default
+          # `character_escapes = true`. If we consulted utils.pl AFTER
+          # setting the flag off, that literal would be misread as a
+          # backslash followed by a stray quote, terminating the string
+          # prematurely and producing a syntax error. `dynamic/1`
+          # declarations for potentially-empty kb_* predicates go AFTER
+          # utils.pl too so they don't need re-declaration inside it.
+          query="consult('/queryengine/utils.pl'), \
+                 set_prolog_flag(character_escapes, false), \
                  dynamic(kb_callable_returns_without_value/2), \
                  dynamic(kb_call_1st_party_func_defined_in_file/3), \
                  dynamic(kb_call_1st_party_func_defined_in_dir/3), \
                  dynamic(kb_func_def/4), \
                  dynamic(kb_called_from/2), \
-                 consult('/queryengine/utils.pl'), \
                  consult('${formbricks_kb_path}'), \
                  findall(F, ( utils_authenticating_function_by_return_values(F), \
                               sub_atom(F, _, _, _, '${file_marker}') ), Fs), \
