@@ -315,5 +315,150 @@ jobs:
           echo "PASS: shape recognizer matched $match_count callable(s) in checkAuth's source file"
           rm -f shape_query.log
 
+      - name: assert utils_capability_verifier detects validateLocalSignedUrl in formbricks
+        run: |
+          # Runs `utils_capability_verifier/1` from the queryengine's baked-in
+          # utils.pl against the formbricks KB the earlier step generated.
+          # The predicate has two tiers ( see utils.pl comment block ) :
+          #
+          #   tier-1 name catalog        : utils_capability_verifier_by_name/1
+          #   tier-2 structural detector : utils_capability_verifier_by_shape/1
+          #
+          # `validateLocalSignedUrl` is currently in the tier-1 name catalog,
+          # so this step is the end-to-end sensor for : ( a ) the name entry
+          # being present in utils.pl ; ( b ) kbgen emitting a kb_func_def/4
+          # for the actual definition site in `apps/web/lib/crypto.ts`. If
+          # either regresses, this step fails.
+          #
+          # We deliberately anchor on the FILE marker for `apps/web/lib/crypto.ts`
+          # ( where the verifier is defined ) rather than accepting any match,
+          # so a spurious same-name definition in some other file wouldn't
+          # silently pass. `Fs = [_|_]` means "at least one match" -- future
+          # additions in the same file that also qualify keep the test stable.
+          #
+          # See the "assert shape recognizer detects checkAuth" step above for
+          # the full rationale on `set_prolog_flag(character_escapes, false)`,
+          # `dynamic(kb_...)` declarations, and the ORDER-MATTERS consult
+          # sequence ; the same reasoning applies here verbatim.
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          file_marker='apps_slash_web_slash_lib_slash_crypto_dot_ts'
+          echo "querying queryengine's swipl for capability verifiers in file marker: $file_marker"
+          query="consult('/queryengine/utils.pl'), \
+                 set_prolog_flag(character_escapes, false), \
+                 dynamic(kb_callable_returns_without_value/2), \
+                 dynamic(kb_call_1st_party_func_defined_in_file/3), \
+                 dynamic(kb_call_1st_party_func_defined_in_dir/3), \
+                 dynamic(kb_func_def/4), \
+                 dynamic(kb_called_from/2), \
+                 dynamic(kb_comparison/4), \
+                 dynamic(kb_gated_return/2), \
+                 dynamic(kb_call_resolved/2), \
+                 consult('${formbricks_kb_path}'), \
+                 findall(F, ( utils_capability_verifier(F), \
+                              sub_atom(F, _, _, _, '${file_marker}') ), Fs), \
+                 length(Fs, N), \
+                 format('MATCH_COUNT: ~w~n', [N]), \
+                 forall( member(F, Fs), format('MATCH: ~q~n', [F]) ), \
+                 Fs = [_|_], \
+                 halt(0)"
+          set +e
+          $compose exec -T queryengine swipl -g "$query" -t "halt(1)" | tee capability_verifier_query.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "FAIL: utils_capability_verifier returned no matches in validateLocalSignedUrl's source file"
+            exit 1
+          fi
+          if ! grep -q "^MATCH:" capability_verifier_query.log; then
+            echo "FAIL: no MATCH line in swipl output"
+            exit 1
+          fi
+          match_count=$(grep -c "^MATCH:" capability_verifier_query.log)
+          echo "PASS: utils_capability_verifier matched $match_count callable(s) in validateLocalSignedUrl's source file"
+          rm -f capability_verifier_query.log
+
+      - name: assert utils_reaches_capability_verifier detects H1 POST handler delegating to validateLocalSignedUrl
+        run: |
+          # Runs `utils_reaches_capability_verifier/2` from utils.pl against
+          # the formbricks KB. The predicate is bounded at 2 hops ( see the
+          # comment block in utils.pl ) and marks callables that delegate
+          # to a capability verifier via a 1st-party call chain. In this
+          # fixture the H1 storage POST handler at
+          # `apps/web/app/api/v1/management/storage/local/route.ts:52`
+          # calls `validateLocalSignedUrl` directly -- a 1-hop match.
+          #
+          # This step is the end-to-end sensor for THREE moving parts
+          # landing together :
+          #   1. kbgen        : kb_called_from/2 +
+          #                     kb_call_1st_party_func_defined_in_file/3
+          #                     ( or _in_dir/3 ) for the H1 -> verifier edge.
+          #   2. utils.pl     : utils_reaches_capability_verifier_1hop/2 and
+          #                     its resolver helper utils_1st_party_call_to_func/2.
+          #   3. compose      : queryengine >= 1.0.51-x64 pinned in
+          #                     `compose.prebuilt.yaml` ( carries the new
+          #                     predicate ).
+          # If ANY of the three regresses, this step fails.
+          #
+          # We anchor on the FILE marker for the H1 POST handler
+          # ( `route.ts` ), NOT the verifier's file. The predicate's first
+          # argument is the CALLER -- the "capability-gated" callable that
+          # downstream ranking wants to flag as
+          # non-independently-discoverable.
+          #
+          # `Pairs = [_|_]` -- at least one match. formbricks v3.16.0 has
+          # a single POST handler in that file ( the H1 endpoint ). The
+          # "at least one" phrasing keeps the test stable if future
+          # refactors add more handlers to the same file.
+          #
+          # See the "assert shape recognizer detects checkAuth" step for
+          # the full rationale on the swipl invocation shape ( consult
+          # order, character_escapes, dynamic() declarations ).
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          file_marker='apps_slash_web_slash_app_slash_api_slash_v1_slash_management_slash_storage_slash_local_slash_route_dot_ts'
+          echo "querying queryengine's swipl for capability-gated callers in file marker: $file_marker"
+          query="consult('/queryengine/utils.pl'), \
+                 set_prolog_flag(character_escapes, false), \
+                 dynamic(kb_callable_returns_without_value/2), \
+                 dynamic(kb_call_1st_party_func_defined_in_file/3), \
+                 dynamic(kb_call_1st_party_func_defined_in_dir/3), \
+                 dynamic(kb_func_def/4), \
+                 dynamic(kb_called_from/2), \
+                 dynamic(kb_comparison/4), \
+                 dynamic(kb_gated_return/2), \
+                 dynamic(kb_call_resolved/2), \
+                 consult('${formbricks_kb_path}'), \
+                 findall(H-V, ( utils_reaches_capability_verifier(H, V), \
+                                sub_atom(H, _, _, _, '${file_marker}') ), Pairs), \
+                 length(Pairs, N), \
+                 format('MATCH_COUNT: ~w~n', [N]), \
+                 forall( member(H-V, Pairs), format('MATCH: ~q -> ~q~n', [H, V]) ), \
+                 Pairs = [_|_], \
+                 halt(0)"
+          set +e
+          $compose exec -T queryengine swipl -g "$query" -t "halt(1)" | tee reaches_capability_verifier_query.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "FAIL: utils_reaches_capability_verifier returned no matches in the H1 storage POST handler's source file"
+            exit 1
+          fi
+          if ! grep -q "^MATCH:" reaches_capability_verifier_query.log; then
+            echo "FAIL: no MATCH line in swipl output"
+            exit 1
+          fi
+          match_count=$(grep -c "^MATCH:" reaches_capability_verifier_query.log)
+          echo "PASS: utils_reaches_capability_verifier matched $match_count caller(s) delegating to a capability verifier"
+          rm -f reaches_capability_verifier_query.log
+
       - name: remove formbricks tested code
         run: rm -rf formbricks
