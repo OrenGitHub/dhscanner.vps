@@ -460,5 +460,197 @@ jobs:
           echo "PASS: utils_reaches_capability_verifier matched $match_count caller(s) delegating to a capability verifier"
           rm -f reaches_capability_verifier_query.log
 
+      - name: assert new URL construction facts on formbricks KB
+        run: |
+          # Guards the four `new URL(...)` construction sites emitted by
+          # `getUploadSignedUrl` in apps/web/lib/storage/service.ts.
+          # See tests/expected/facts/formbricks/url_calls.txt for the
+          # exact facts + source anchors (lines 181, 182, 189, 208).
+          # Regression sensor for :
+          #   (a) `instrumentNodejsURLType` in TsParserActions.hs -- the
+          #       synthetic-import trick that pins `new URL(...)` to the
+          #       stable FQN `nodejs.URL` (mirrors the pre-existing
+          #       `nodejs.Request` / `nodejs.Response` cases). Without
+          #       it, `URL` resolves to a bare local name and none of
+          #       the four `kb_call_resolved` facts fire.
+          #   (b) The `expNew` grammar path in TsParser.y is still able
+          #       to lower `new URL(<template-literal>)` -- which
+          #       requires the fstring parsing chain further down (the
+          #       "fstring const-part" step below is the finer-grained
+          #       sensor for that half).
+          #   (c) `kb_func_def/4` still fires for the arrow-function
+          #       shape of `getUploadSignedUrl` (const F = async (...) => {...}).
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          echo "copying KB from queryengine:${formbricks_kb_path}"
+          $compose cp "queryengine:${formbricks_kb_path}" ./formbricks_kb.pl
+          echo "KB lines: $(wc -l < formbricks_kb.pl)"
+          missing=0
+          total=0
+          while IFS= read -r expected || [ -n "$expected" ]; do
+            expected=$(printf '%s' "$expected" | tr -d '\r')
+            [ -z "$expected" ] && continue
+            case "$expected" in \#*) continue ;; esac
+            total=$((total + 1))
+            if grep -Fqx "$expected" formbricks_kb.pl; then
+              echo "  OK  : $expected"
+            else
+              echo "  MISS: $expected"
+              missing=$((missing + 1))
+            fi
+          done < tests/expected/facts/formbricks/url_calls.txt
+          echo "checked=$total missing=$missing"
+          if [ "$missing" -gt 0 ]; then
+            echo "FAILED: $missing expected URL construction fact(s) missing from KB"
+            exit 1
+          fi
+          rm -f formbricks_kb.pl
+
+      - name: assert fstring const-part facts on formbricks KB
+        run: |
+          # Guards the constant string parts extracted from the four
+          # `new URL(`...`).href` template literals emitted by
+          # `getUploadSignedUrl` in apps/web/lib/storage/service.ts.
+          # See tests/expected/facts/formbricks/fstring_const_parts.txt
+          # for the exact facts + source anchors (lines 181, 182, 189, 208).
+          # Regression sensor for the three-part fstring parsing chain :
+          #   (1) frontts / parser.ts : the TemplateHead / TemplateMiddle
+          #       / TemplateTail / NoSubstitutionTemplateLiteral cases
+          #       emit `.text` as a STR-token payload ( default branch
+          #       drops it, producing empty parens ).
+          #   (2) parsers / TsParser.y : templateHead / templateMiddle /
+          #       lastTemplateToken / exp_template_token rules consume
+          #       the STR payload and return an `Ast.ExpStr` per
+          #       constant segment ; `template_span` returns a 2-element
+          #       list interleaving the interpolated expression with
+          #       the literal suffix ; `fstring` retargeted onto
+          #       `Actions.fstring`.
+          #   (3) parsers / TsParserActions.hs : `constStrExp` +
+          #       `fstring` wire the interleaved head + span pairs into
+          #       an `instrumentationCall "fstring"` -- kbgen then
+          #       emits one `kb_const_string` per literal segment.
+          # If ANY of those regresses, the const-string facts below
+          # will not appear in the KB and this step fails.
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          echo "copying KB from queryengine:${formbricks_kb_path}"
+          $compose cp "queryengine:${formbricks_kb_path}" ./formbricks_kb.pl
+          echo "KB lines: $(wc -l < formbricks_kb.pl)"
+          missing=0
+          total=0
+          while IFS= read -r expected || [ -n "$expected" ]; do
+            expected=$(printf '%s' "$expected" | tr -d '\r')
+            [ -z "$expected" ] && continue
+            case "$expected" in \#*) continue ;; esac
+            total=$((total + 1))
+            if grep -Fqx "$expected" formbricks_kb.pl; then
+              echo "  OK  : $expected"
+            else
+              echo "  MISS: $expected"
+              missing=$((missing + 1))
+            fi
+          done < tests/expected/facts/formbricks/fstring_const_parts.txt
+          echo "checked=$total missing=$missing"
+          if [ "$missing" -gt 0 ]; then
+            echo "FAILED: $missing expected fstring const-part fact(s) missing from KB"
+            exit 1
+          fi
+          rm -f formbricks_kb.pl
+
+      - name: assert utils_url_flows_to_return_value detects the 4 URLs of getUploadSignedUrl
+        run: |
+          # Runs `utils_url_flows_to_return_value/3` from the queryengine's
+          # baked-in utils.pl against the formbricks KB. The predicate
+          # ties each `new URL(...)` construction inside a callable to
+          # one of that callable's explicit `return` values via at most
+          # 5 SSA dataflow hops -- see the utils.pl comment block for
+          # the full design.
+          #
+          # This step is the end-to-end sensor for FOUR moving parts
+          # landing together on the URL-emitter recognition path :
+          #   1. parsers / TsParserActions.hs : `instrumentNodejsURLType`
+          #      pins `new URL(...)` to the FQN `nodejs.URL` via a
+          #      synthetic import.
+          #   2. parsers / TsParser.y + frontts / parser.ts : the fstring
+          #      parsing chain (see the two grep-based steps above) is
+          #      what lets `new URL(<template-literal>)` reach the
+          #      grammar's `expNew` path in the first place -- without
+          #      it, all four URL construction sites fail to parse and
+          #      the predicate has nothing to match on.
+          #   3. kbgen : `kb_call_resolved/2` + `kb_called_from/2` +
+          #      `kb_callable_returns_value/2` + `kb_dataflow_edge/2`.
+          #      All four facts must fire for the predicate's
+          #      conjunction to succeed.
+          #   4. queryengine >= 1.0.51-x64 pinned in compose.prebuilt.yaml
+          #      (carries the new `utils_url_flows_to_return_value/3`
+          #      predicate + the 5-hop `utils_bounded_intra_dataflow_path/5`
+          #      it composes on top of).
+          #
+          # Anchored on `kb_func_def(Callable, 'getUploadSignedUrl', _, _)`
+          # so a spurious same-name definition in some other file wouldn't
+          # silently pass. The `setof/3` dedupes URL call sites reached
+          # via multiple SSA paths so the arity assertion counts UNIQUE
+          # construction sites rather than paths.
+          #
+          # `length(URLCalls, N), N >= 4` -- the four demo/formbricks.md
+          # URL sites are the minimum. "at least four" keeps the test
+          # stable under future refactors that split or add URL emitters
+          # inside `getUploadSignedUrl` without breaking the demo shape.
+          #
+          # See the "assert shape recognizer detects checkAuth" step above
+          # for the full rationale on the swipl invocation shape (consult
+          # order, `set_prolog_flag(character_escapes, false)`, `dynamic()`
+          # declarations for potentially-empty kb_* predicates).
+          compose="docker compose \
+            -f ./compose/compose.base.yaml \
+            -f ./compose/compose.app.yaml \
+            -f ./compose/compose.fronts.yaml \
+            -f ./compose/compose.prebuilt.yaml \
+            -f ./compose/compose.workers.yaml"
+          echo "querying queryengine's swipl for URL flows into getUploadSignedUrl's returns"
+          query="consult('/queryengine/utils.pl'), \
+                 set_prolog_flag(character_escapes, false), \
+                 dynamic(kb_callable_returns_without_value/2), \
+                 dynamic(kb_call_1st_party_func_defined_in_file/3), \
+                 dynamic(kb_call_1st_party_func_defined_in_dir/3), \
+                 dynamic(kb_func_def/4), \
+                 dynamic(kb_called_from/2), \
+                 dynamic(kb_call_resolved/2), \
+                 dynamic(kb_callable_returns_value/2), \
+                 dynamic(kb_dataflow_edge/2), \
+                 consult('${formbricks_kb_path}'), \
+                 setof(URLCall, Callable^RV^( \
+                     utils_url_flows_to_return_value(URLCall, Callable, RV), \
+                     kb_func_def(Callable, 'getUploadSignedUrl', _, _) \
+                 ), URLCalls), \
+                 length(URLCalls, N), \
+                 format('MATCH_COUNT: ~w~n', [N]), \
+                 forall( member(U, URLCalls), format('MATCH: ~q~n', [U]) ), \
+                 N >= 4, \
+                 halt(0)"
+          set +e
+          $compose exec -T queryengine swipl -g "$query" -t "halt(1)" | tee url_flow_query.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "FAIL: utils_url_flows_to_return_value did not surface >= 4 unique URL construction sites inside getUploadSignedUrl"
+            exit 1
+          fi
+          match_count=$(grep -c "^MATCH:" url_flow_query.log)
+          if [ "$match_count" -lt 4 ]; then
+            echo "FAIL: expected at least 4 MATCH lines, got $match_count"
+            exit 1
+          fi
+          echo "PASS: utils_url_flows_to_return_value matched $match_count unique URL construction site(s) inside getUploadSignedUrl"
+          rm -f url_flow_query.log
+
       - name: remove formbricks tested code
         run: rm -rf formbricks

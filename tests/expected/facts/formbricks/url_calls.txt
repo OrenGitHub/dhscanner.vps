@@ -1,0 +1,42 @@
+# Expected KB facts for the four `new URL(...)` construction sites emitted by
+# `getUploadSignedUrl` in formbricks v3.16.0 at:
+#
+#     apps/web/lib/storage/service.ts
+#
+# Source anchors (single function body, spanning lines 151..213):
+#
+#     181  new URL(`${publicDomain}/api/v1/client/${environmentId}/storage/local`).href     -- H2' private capability endpoint
+#     182  new URL(`${WEBAPP_URL}/api/v1/management/storage/local`).href                     -- H2 public capability endpoint
+#     189  new URL(`${baseUrl}/storage/${environmentId}/${accessType}/${updatedFileName}`).href  -- fileUrl (local-storage branch)
+#     208  new URL(`${baseUrl}/storage/${environmentId}/${accessType}/${updatedFileName}`).href  -- fileUrl (S3 branch)
+#
+# These are the four URLs called out by demo/formbricks.md, Task G, as the
+# target of the URL-emitter recognizer + N-hop return-value dataflow.
+#
+# Each fact below jointly guards ONE moving part of the "recognize URLs
+# emitted through response objects" pipeline. If any regresses this step
+# fails :
+#
+#   1. kb_func_def   (getUploadSignedUrl)
+#        -- the parser lowered the function into a first-party callable
+#           at the expected source anchor. Regression sensor for the
+#           `expArrowFunction` handling in TsParserActions.hs plus the
+#           downstream codegen -> kbgen chain for callable facts.
+#
+#   2. kb_call_resolved (nodejs.URL, four times)
+#        -- every `new URL(...)` construction resolves to the pinned FQN
+#           `nodejs.URL`. Regression sensor for the synthetic-import trick
+#           `instrumentNodejsURLType` in TsParserActions.hs (mirrors the
+#           existing `nodejs.Request` / `nodejs.Response` cases) plus the
+#           `expNew` grammar path in TsParser.y. Without the synthetic
+#           import, `new URL(...)` resolves to a bare local name and this
+#           fact never fires.
+#
+# Lines starting with '#' and blank lines are ignored by the CI checker.
+# Every remaining line must appear verbatim in the queryengine's KB file.
+
+kb_func_def( startloc_151_35_endloc_213_2_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, 'getUploadSignedUrl', 'apps/web/lib/storage/service.ts', 'apps/web/lib/storage' ).
+kb_call_resolved( startloc_181_15_endloc_181_86_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, 'nodejs.URL' ).
+kb_call_resolved( startloc_182_15_endloc_182_71_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, 'nodejs.URL' ).
+kb_call_resolved( startloc_189_18_endloc_189_97_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, 'nodejs.URL' ).
+kb_call_resolved( startloc_208_16_endloc_208_95_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, 'nodejs.URL' ).
