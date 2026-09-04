@@ -1,0 +1,55 @@
+# Expected KB facts for the constant string parts extracted from the four
+# `new URL(`...`).href` template literals emitted by `getUploadSignedUrl`
+# in formbricks v3.16.0 at:
+#
+#     apps/web/lib/storage/service.ts
+#
+# Source anchors, with the interpolated `${...}` slots redacted so only
+# the constant "route" parts remain -- those are what the downstream
+# const-ratio ranking (see demo/formbricks.md, Task G) uses to score
+# URL-emitting handlers:
+#
+#     181  `... /api/v1/client/ ... /storage/local`               -- H2' private
+#     182  `... /api/v1/management/storage/local`                 -- H2 public
+#     189  `... /storage/ ... / ... / ... `                       -- fileUrl (local)
+#     208  `... /storage/ ... / ... / ... `                       -- fileUrl (S3)
+#
+# The parser side that emits these facts is a three-part change:
+#
+#   1. `parser.ts` in the frontts service adds explicit handlers for
+#      `ts.SyntaxKind.TemplateHead` / `TemplateMiddle` / `TemplateTail` /
+#      `NoSubstitutionTemplateLiteral`. The default branch would drop
+#      the constant text ( these nodes have no AST children ), so the
+#      handlers pull `.text` and emit it as a STR-token payload -- the
+#      cooked-text-in-parens shape the Happy grammar's `templateHead`,
+#      `templateMiddle`, `lastTemplateToken`, and `exp_template_token`
+#      rules consume.
+#
+#   2. `TsParser.y` updates those four productions to actually read the
+#      STR payload (instead of returning `Nothing`), and rewires
+#      `template_span` to return a 2-element list `[interpolatedExp,
+#      literalSuffixExpStr]`. The `fstring` production is retargeted
+#      onto the new `Actions.fstring` smart constructor.
+#
+#   3. `TsParserActions.hs` adds `constStrExp` helper and rewires
+#      `fstring` to wrap the head expression plus every span's
+#      `[interpolatedExp, literalSuffixExpStr]` pair as an interleaved
+#      argument list to `instrumentationCall "fstring"`. The interleaving
+#      is what preserves the const/dynamic distinction so kbgen can
+#      emit `kb_const_string` for the literal segments while still
+#      routing the interpolated slots through the normal dataflow graph.
+#
+# If ANY of those three parts regresses ( for example the frontts image
+# gets rebuilt from a pre-fix parser.ts, or the `constStrExp` helper
+# gets dropped, or the grammar rules revert to their `Nothing` result
+# form ), the const-string facts below will not appear in the KB and
+# this CI step will fail.
+#
+# Lines starting with '#' and blank lines are ignored by the CI checker.
+# Every remaining line must appear verbatim in the queryengine's KB file.
+
+kb_const_string( startloc_181_38_endloc_181_56_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, '/api/v1/client/' ).
+kb_const_string( startloc_181_69_endloc_181_85_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, '/storage/local' ).
+kb_const_string( startloc_182_36_endloc_182_70_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, '/api/v1/management/storage/local' ).
+kb_const_string( startloc_189_36_endloc_189_48_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, '/storage/' ).
+kb_const_string( startloc_208_34_endloc_208_46_apps_slash_web_slash_lib_slash_storage_slash_service_dot_ts, '/storage/' ).
